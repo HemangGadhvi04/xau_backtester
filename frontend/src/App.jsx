@@ -542,129 +542,94 @@ function App() {
     equity: account.balance + unrealizedPnl
   }), [account, unrealizedPnl]);
 
-  // Order Placement (Persists directly to SQLite)
-  const handlePlaceOrder = async (type, lots, entryPrice, sl, tp, isLimit) => {
-    const cfg = getSymbolConfig(activeSymbol);
-    const precisionFactor = Math.pow(10, cfg.precision);
-
-    // 1. Leverage Margin Check
-    const usedMargin = positions.reduce((total, pos) => total + (pos.entryPrice * pos.lots * cfg.contractSize) / LEVERAGE, 0);
-    const freeMargin = derivedAccount.equity - usedMargin;
-    const requiredMargin = (entryPrice * lots * cfg.contractSize) / LEVERAGE;
-
-    if (requiredMargin > freeMargin) {
-      alert(`Margin Call / Insufficient Margin! Required Margin: $${requiredMargin.toFixed(2)}, Available Free Margin: $${freeMargin.toFixed(2)}`);
-      return;
-    }
-
-    const timestamp = allCandles[currentIndex - 1]?.time;
-    let finalEntryPrice = entryPrice;
-
-    // Apply spread & slippage for market orders
-    if (!isLimit) {
-      const slippage = getSlippage(timestamp, activeSymbol);
-      if (type === 'BUY') {
-        finalEntryPrice = entryPrice + cfg.defaultSpread + slippage;
-      } else {
-        finalEntryPrice = entryPrice - slippage;
-      }
-    }
-
-    const id = Date.now();
-    const newOrder = {
-      id,
-      type,
-      lots,
-      entryPrice: finalEntryPrice,
-      sl: sl ? Math.round(sl * precisionFactor) / precisionFactor : null,
-      tp: tp ? Math.round(tp * precisionFactor) / precisionFactor : null,
-      timestamp
-    };
-
+  // Authoritative Replay Engine Helper
+  const syncReplayState = async () => {
     try {
-      await axios.post(`${API_BASE}/trades`, {
-        id: String(id),
-        session_id: 'default_session',
-        symbol: activeSymbol,
-        direction: type,
-        lots,
-        entry_price: finalEntryPrice,
-        entry_time: timestamp,
-        sl: newOrder.sl,
-        tp: newOrder.tp,
-        status: isLimit ? 'PENDING' : 'OPEN'
-      });
-
-      if (isLimit) {
-        setPendingOrders(prev => [...prev, newOrder]);
-      } else {
-        setPositions(prev => [...prev, newOrder]);
+      const res = await axios.get(`${API_BASE}/replay/state?symbol=${activeSymbol}`);
+      if (res.data) {
+        setPositions((res.data.positions || []).map(p => ({
+          id: p.id,
+          type: p.direction,
+          lots: p.lots,
+          entryPrice: p.entry_price,
+          sl: p.sl,
+          tp: p.tp,
+          timestamp: p.entry_time
+        })));
+        setPendingOrders((res.data.pending_orders || []).map(o => ({
+          id: o.id,
+          type: o.direction,
+          lots: o.lots,
+          entryPrice: o.price,
+          sl: o.sl,
+          tp: o.tp,
+          timestamp: o.created_time
+        })));
+        setTradeHistory((res.data.trade_history || []).map(t => ({
+          id: t.id,
+          type: t.direction,
+          lots: t.lots,
+          entryPrice: t.entry_price,
+          entryTime: t.entry_time,
+          closePrice: t.exit_price,
+          closeTime: t.exit_time,
+          pnl: t.pnl,
+          sl: t.sl,
+          tp: t.tp
+        })));
+        if (res.data.account) {
+          setAccount(prev => ({
+            ...prev,
+            balance: res.data.account.balance,
+            equity: res.data.account.equity
+          }));
+        }
       }
     } catch (e) {
-      console.error("Error saving placed order to DB:", e);
+      console.error("Error fetching authoritative replay state:", e);
+    }
+  };
+
+  // Order Placement (Delegated to Authoritative Replay Engine)
+  const handlePlaceOrder = async (type, lots, entryPrice, sl, tp, isLimit) => {
+    try {
+      await axios.post(`${API_BASE}/replay/order?symbol=${activeSymbol}`, {
+        direction: type,
+        order_type: isLimit ? 'LIMIT' : 'MARKET',
+        lots,
+        price: isLimit ? entryPrice : null,
+        sl: sl || null,
+        tp: tp || null
+      });
+      await syncReplayState();
+    } catch (e) {
+      console.error("Error placing order via ReplayEngine:", e);
     }
   };
 
   const saveTradeScreenshot = async (tradeId) => {
-    // Feature disabled: User requested to save space since interactive replay exists.
     return;
   };
 
-  // Close Position Manually (Syncs to SQLite)
-  const handleClosePosition = async (id, closePrice) => {
-    const pos = positions.find(p => p.id === id);
-    if (!pos) return;
-
-    const cfg = getSymbolConfig(activeSymbol);
-    const timestamp = allCandles[currentIndex - 1]?.time;
-    const slippage = getSlippage(timestamp, activeSymbol);
-    
-    // Apply spread & slippage to exit
-    const finalClosePrice = pos.type === 'BUY'
-      ? closePrice - slippage // BUY exits at Bid (closePrice is Bid) - slippage
-      : closePrice + cfg.defaultSpread + slippage; // SELL exits at Ask (closePrice + spread) + slippage
-
-    const isBuy = pos.type === 'BUY';
-    const priceDiff = isBuy ? (finalClosePrice - pos.entryPrice) : (pos.entryPrice - finalClosePrice);
-    const pnl = priceDiff * pos.lots * cfg.contractSize;
-
+  // Close Position Manually (Delegated to Authoritative Replay Engine)
+  const handleClosePosition = async (id) => {
     try {
-      await axios.patch(`${API_BASE}/trades/${id}`, {
-        status: 'CLOSED',
-        exit_price: finalClosePrice,
-        exit_time: timestamp,
-        pnl
-      });
-
-      const closedTrade = {
-        ...pos,
-        closePrice: finalClosePrice,
-        pnl,
-        closeTime: timestamp
-      };
-
-      setTradeHistory(prev => [closedTrade, ...prev]);
-      saveTradeScreenshot(id);
-      setPositions(prev => prev.filter(p => p.id !== id));
-      setAccount(prev => ({
-        ...prev,
-        balance: prev.balance + pnl,
-        equity: prev.balance + pnl
-      }));
+      await axios.post(`${API_BASE}/replay/position/${id}/close?symbol=${activeSymbol}`);
+      await syncReplayState();
     } catch (e) {
-      console.error("Error updating closed position in DB:", e);
+      console.error("Error closing position via ReplayEngine:", e);
     }
   };
 
-  // Cancel Pending Limit Order (Syncs to SQLite)
   const handleCancelPendingOrder = async (id) => {
     try {
-      await axios.delete(`${API_BASE}/trades/${id}`);
-      setPendingOrders(prev => prev.filter(order => order.id !== id));
+      await axios.delete(`${API_BASE}/replay/order/${id}?symbol=${activeSymbol}`);
+      await syncReplayState();
     } catch (e) {
-      console.error("Error deleting pending order in DB:", e);
+      console.error("Error canceling pending order via ReplayEngine:", e);
     }
   };
+
 
   // Replay tick execution check
   const checkPendingAndPositions = useCallback((candle) => {

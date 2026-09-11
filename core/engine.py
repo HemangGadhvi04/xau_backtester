@@ -1,37 +1,61 @@
-import os
 import pandas as pd
-import numpy as np
+from typing import List, Dict, Any, Optional
 from backend.config import SYMBOL_CONFIGS
+from core.execution.models import OrderDirection
+from core.execution.fills import (
+    calculate_deterministic_slippage,
+    calculate_market_fill,
+    check_limit_order_trigger,
+    check_stop_order_trigger
+)
+from core.execution.pnl import (
+    calculate_trade_pnl,
+    calculate_position_unrealized_pnl
+)
+from core.execution.risk import check_margin_available
+
 
 class BacktestEngine:
-    def __init__(self, initial_balance=10000, leverage=100, spread=None, default_slippage=0.02, symbol="XAUUSD", use_random_slippage=True, commission_per_lot=0.0):
-        self.initial_balance = initial_balance
-        self.balance = initial_balance
-        self.equity = initial_balance
-        self.leverage = leverage
-        self.default_slippage = default_slippage
-        self.symbol = symbol
-        self.use_random_slippage = use_random_slippage
-        self.commission_per_lot = commission_per_lot  # Round-trip USD per lot.
-        
-        cfg = SYMBOL_CONFIGS.get(symbol, SYMBOL_CONFIGS["XAUUSD"])
-        self.pip_size = cfg["pipSize"]
-        self.contract_size = cfg["contractSize"]
-        self.precision = cfg["precision"]
-        self.spread = cfg["defaultSpread"] if spread is None else spread
-        
-        self.candles = []
-        self.current_index = 0
-        self.positions = []
-        self.pending_orders = []
-        self.trade_history = []
-        
-        # Performance Tracking
-        self.equity_curve = []
-        self.timestamps = []
+    """
+    Systematic Backtest Engine using shared core/execution primitives
+    for deterministic fill calculations and risk/P&L accounting.
+    """
+    def __init__(
+        self,
+        initial_balance: float = 10000.0,
+        leverage: float = 100.0,
+        spread: Optional[float] = None,
+        default_slippage: float = 0.02,
+        symbol: str = "XAUUSD",
+        use_random_slippage: bool = True,
+        commission_per_lot: float = 0.0
+    ):
+        self.initial_balance: float = initial_balance
+        self.balance: float = initial_balance
+        self.equity: float = initial_balance
+        self.leverage: float = leverage
+        self.default_slippage: float = default_slippage
+        self.symbol: str = symbol
+        self.use_random_slippage: bool = use_random_slippage
+        self.commission_per_lot: float = commission_per_lot
 
-    def load_data(self, data_list):
-        """Loads candles list of dicts: [{'time': ..., 'open': ...}]"""
+        cfg = SYMBOL_CONFIGS.get(symbol, SYMBOL_CONFIGS["XAUUSD"])
+        self.pip_size: float = cfg["pipSize"]
+        self.contract_size: float = cfg["contractSize"]
+        self.precision: int = cfg["precision"]
+        self.spread: float = cfg["defaultSpread"] if spread is None else spread
+
+        self.candles: List[Dict[str, Any]] = []
+        self.current_index: int = 0
+        self.positions: List[Dict[str, Any]] = []
+        self.pending_orders: List[Dict[str, Any]] = []
+        self.trade_history: List[Dict[str, Any]] = []
+
+        self.equity_curve: List[float] = []
+        self.timestamps: List[int] = []
+        self._order_counter: int = 0
+
+    def load_data(self, data_list: List[Dict[str, Any]]):
         self.candles = data_list
         self.current_index = 0
         self.balance = self.initial_balance
@@ -42,60 +66,64 @@ class BacktestEngine:
         self.equity_curve = [self.initial_balance]
         self.timestamps = []
 
-    def get_slippage(self, timestamp):
-        """NY Session Overlap slippage model matching frontend logic."""
-        # Convert timestamp to UTC hour using integer math (much faster than pd.to_datetime)
+    def get_slippage(self, timestamp: int, order_id: str = "bt_order") -> float:
+        """Uses shared deterministic slippage model."""
         hour = (timestamp % 86400) // 3600
         is_overlap = 12 <= hour <= 16
-        # Scale slippage based on pip size: XAU default was 0.01/0.02, which is 0.1/0.2 pips.
-        # So slippage = pips * pip_size
         base_pips = 0.2 if is_overlap else 0.1
-        if self.use_random_slippage:
-            random_pips = np.random.uniform(0, 0.8 if is_overlap else 0.3)
-        else:
-            # Deterministic average slippage penalty
+        if not self.use_random_slippage:
             random_pips = 0.4 if is_overlap else 0.15
-        return (base_pips + random_pips) * self.pip_size
+            return (base_pips + random_pips) * self.pip_size
 
-    def place_order(self, direction, lots, sl=None, tp=None, execution_price=None):
+        return calculate_deterministic_slippage(
+            session_id="systematic_backtest",
+            order_id=order_id,
+            timestamp=timestamp,
+            execution_type="FILL",
+            pip_size=self.pip_size
+        )
+
+
+    def place_order(
+        self,
+        direction: OrderDirection,
+        lots: float,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
+        execution_price: Optional[float] = None
+    ) -> Optional[Dict[str, Any]]:
         current_candle = self.candles[self.current_index]
-        entry_bid = current_candle['close'] if execution_price is None else execution_price
+        bid_price = current_candle['close'] if execution_price is None else execution_price
         timestamp = current_candle['time']
-        
-        slippage = self.get_slippage(timestamp)
-        
-        # Calculate Margin
-        required_margin = (entry_bid * lots * self.contract_size) / self.leverage
-        used_margin = sum((pos['entry_price'] * pos['lots'] * self.contract_size) / self.leverage for pos in self.positions)
-        free_margin = self.equity - used_margin
-        
-        if required_margin > free_margin:
-            # Margin call block
+
+        self._order_counter += 1
+        order_id = f"bt_{self._order_counter}"
+        slippage = self.get_slippage(timestamp, order_id)
+
+        fill_price, _ = calculate_market_fill(direction, bid_price, self.spread, slippage)
+
+        # Margin check using shared risk primitive
+        account_mock = type("Acc", (), {"free_margin": self.equity, "leverage": self.leverage})()
+        if not check_margin_available(account_mock, fill_price, lots, self.contract_size):
             return None
 
-        if direction == "BUY":
-            # BUY fills at Ask = Bid + Spread + Slippage
-            entry_price = entry_bid + self.spread + slippage
-        else:
-            # SELL fills at Bid = Bid - Slippage
-            entry_price = entry_bid - slippage
-
-        pos_id = len(self.trade_history) + len(self.positions) + 1
         pos = {
-            "id": pos_id,
+            "id": self._order_counter,
             "direction": direction,
             "lots": lots,
-            "entry_price": entry_price,
+            "entry_price": fill_price,
             "sl": sl,
             "tp": tp,
             "entry_time": timestamp
         }
+
         self.positions.append(pos)
         return pos
 
-    def place_limit_order(self, direction, lots, entry_price, sl=None, tp=None):
+    def place_limit_order(self, direction: OrderDirection, lots: float, entry_price: float, sl: Optional[float] = None, tp: Optional[float] = None) -> Dict[str, Any]:
+        self._order_counter += 1
         order = {
-            "id": len(self.trade_history) + len(self.positions) + len(self.pending_orders) + 1,
+            "id": self._order_counter,
             "type": "LIMIT",
             "direction": direction,
             "lots": lots,
@@ -107,9 +135,10 @@ class BacktestEngine:
         self.pending_orders.append(order)
         return order
 
-    def place_stop_order(self, direction, lots, entry_price, sl=None, tp=None):
+    def place_stop_order(self, direction: OrderDirection, lots: float, entry_price: float, sl: Optional[float] = None, tp: Optional[float] = None) -> Dict[str, Any]:
+        self._order_counter += 1
         order = {
-            "id": len(self.trade_history) + len(self.positions) + len(self.pending_orders) + 1,
+            "id": self._order_counter,
             "type": "STOP",
             "direction": direction,
             "lots": lots,
@@ -124,56 +153,62 @@ class BacktestEngine:
     def cancel_all_orders(self):
         self.pending_orders = []
 
-    def close_all_positions(self, execution_price=None):
-        # Create a copy to prevent mutation issues during iteration
+    def close_all_positions(self, execution_price: Optional[float] = None):
         for pos in list(self.positions):
             price = self.candles[self.current_index]['close'] if execution_price is None else execution_price
             self._close_position(pos, price, "MANUAL")
 
-    def _close_position(self, pos, exit_bid, reason):
+    def _close_position(self, pos: Dict[str, Any], exit_bid: float, reason: str):
         current_candle = self.candles[self.current_index]
         timestamp = current_candle['time']
-        slippage = self.get_slippage(timestamp)
-        
-        if pos['direction'] == "BUY":
-            # BUY exits at Bid = Bid - Slippage
-            exit_price = exit_bid - slippage
-            price_diff = exit_price - pos['entry_price']
-        else:
-            # SELL exits at Ask = Bid + Spread + Slippage
-            exit_price = exit_bid + self.spread + slippage
-            price_diff = pos['entry_price'] - exit_price
+        slippage = self.get_slippage(timestamp, f"close_{pos['id']}")
 
-        commission = pos['lots'] * self.commission_per_lot
-        pnl = price_diff * pos['lots'] * self.contract_size - commission
+        if pos['direction'] == "BUY":
+            exit_price = exit_bid - slippage
+        else:
+            exit_price = exit_bid + self.spread + slippage
+
+        pnl, commission = calculate_trade_pnl(
+            direction=pos['direction'],
+            entry_price=pos['entry_price'],
+            exit_price=exit_price,
+            lots=pos['lots'],
+            contract_size=self.contract_size,
+            commission_per_lot=self.commission_per_lot
+        )
         self.balance += pnl
-        
+
         closed_trade = {
             **pos,
             "exit_price": exit_price,
             "exit_time": timestamp,
-            "pnl": pnl,
-            "commission": commission,
+            "pnl": round(pnl, 2),
+            "commission": round(commission, 2),
             "outcome": reason
         }
+
         self.trade_history.append(closed_trade)
         if pos in self.positions:
             self.positions.remove(pos)
 
-    def _mark_equity(self, bid):
-        unrealized_pnl = 0.0
+    def _mark_equity(self, bid: float):
+        unrealized_total = 0.0
         for pos in self.positions:
-            price_diff = (bid - pos['entry_price'] if pos['direction'] == 'BUY'
-                          else pos['entry_price'] - (bid + self.spread))
-            unrealized_pnl += price_diff * pos['lots'] * self.contract_size
-            unrealized_pnl -= pos['lots'] * self.commission_per_lot
-        self.equity = self.balance + unrealized_pnl
+            unrealized = calculate_position_unrealized_pnl(
+                direction=pos['direction'],
+                entry_price=pos['entry_price'],
+                current_bid=bid,
+                spread=self.spread,
+                lots=pos['lots'],
+                contract_size=self.contract_size,
+                commission_per_lot=self.commission_per_lot
+            )
+            unrealized_total += unrealized
+        self.equity = self.balance + unrealized_total
 
     def run(self, strategy):
         strategy.set_engine(self)
-        
         if not self.candles:
-            print("No data loaded into Backtester Engine.")
             return
 
         for idx in range(len(self.candles)):
@@ -181,65 +216,47 @@ class BacktestEngine:
             current_candle = self.candles[idx]
             timestamp = current_candle['time']
 
-            # Opening callbacks receive no information from the unfinished bar.
             self._mark_equity(current_candle['open'])
             if hasattr(strategy, 'on_open'):
                 strategy.on_open({'time': timestamp, 'open': current_candle['open']})
-            
-            # 1. Update active positions P&L and check SL/TP hits
+
             if self.positions:
                 self._check_sl_tp(current_candle)
-                
-            # 1.5 Check if pending orders triggered
+
             if self.pending_orders:
                 self._check_pending_orders(current_candle)
-            
+
             self._mark_equity(current_candle['close'])
-            
-            # 3. Feed candle to strategy
             strategy.on_candle(current_candle)
             self._mark_equity(current_candle['close'])
             self.equity_curve.append(self.equity)
             self.timestamps.append(timestamp)
 
-        # Close any open positions at the end of the data feed
         self.close_all_positions()
         self.equity = self.balance
-        self.equity_curve[-1] = self.balance
+        if self.equity_curve:
+            self.equity_curve[-1] = self.balance
 
-    def _check_pending_orders(self, candle):
+
+    def _check_pending_orders(self, candle: Dict[str, Any]):
         timestamp = candle['time']
-        slippage = self.get_slippage(timestamp)
-        
         for order in list(self.pending_orders):
+            slippage = self.get_slippage(timestamp, f"pending_{order['id']}")
             triggered = False
             fill_price = None
-            
-            if order['direction'] == "BUY":
-                # Limit BUY triggers if candle low dips below limit price
-                if order['type'] == "LIMIT" and candle['low'] <= order['price']:
-                    triggered = True
-                    fill_price = order['price'] + self.spread + slippage
-                # Stop BUY triggers if candle high breaches stop price
-                elif order['type'] == "STOP" and candle['high'] >= order['price']:
-                    triggered = True
-                    fill_price = order['price'] + self.spread + slippage
-            else:
-                ask_high = candle['high'] + self.spread
-                ask_low = candle['low'] + self.spread
-                if order['type'] == "LIMIT" and ask_high >= order['price']:
-                    triggered = True
-                    fill_price = order['price'] - slippage
-                elif order['type'] == "STOP" and ask_low <= order['price']:
-                    triggered = True
-                    fill_price = order['price'] - slippage
-                    
-            if triggered:
-                required_margin = (fill_price * order['lots'] * self.contract_size) / self.leverage
-                used_margin = sum((pos['entry_price'] * pos['lots'] * self.contract_size) / self.leverage for pos in self.positions)
-                free_margin = self.equity - used_margin
-                
-                if required_margin <= free_margin:
+
+            if order['type'] == "LIMIT":
+                triggered, fill_price = check_limit_order_trigger(
+                    order['direction'], order['price'], candle, self.spread, slippage
+                )
+            elif order['type'] == "STOP":
+                triggered, fill_price = check_stop_order_trigger(
+                    order['direction'], order['price'], candle, self.spread, slippage
+                )
+
+            if triggered and fill_price is not None:
+                account_mock = type("Acc", (), {"free_margin": self.equity, "leverage": self.leverage})()
+                if check_margin_available(account_mock, fill_price, order['lots'], self.contract_size):
                     pos = {
                         "id": order['id'],
                         "direction": order['direction'],
@@ -249,22 +266,21 @@ class BacktestEngine:
                         "tp": order['tp'],
                         "entry_time": timestamp
                     }
+
                     self.positions.append(pos)
                 self.pending_orders.remove(order)
 
-    def _check_sl_tp(self, candle):
+    def _check_sl_tp(self, candle: Dict[str, Any]):
         for pos in list(self.positions):
             hit_sl = False
             hit_tp = False
-            
+
             if pos['direction'] == "BUY":
-                # BUY exits at Bid (candle price is Bid)
                 if pos['sl'] and candle['low'] <= pos['sl']:
                     hit_sl = True
                 if pos['tp'] and candle['high'] >= pos['tp']:
                     hit_tp = True
             else:
-                # SELL exits at Ask (Bid + Spread)
                 ask_high = candle['high'] + self.spread
                 ask_low = candle['low'] + self.spread
                 if pos['sl'] and ask_high >= pos['sl']:
@@ -273,37 +289,34 @@ class BacktestEngine:
                     hit_tp = True
 
             if hit_sl or hit_tp:
-                # Pessimistic execution: assume SL hit first if both are hit
                 resolved_sl = hit_sl
                 reason = "SL" if resolved_sl else "TP"
-                
-                # Gaps through stops fill at the opening quote; slippage is
-                # applied exactly once by _close_position.
-                if pos['direction'] == "BUY":
-                    exit_price = min(pos['sl'], candle['open']) if resolved_sl else pos['tp']
-                else:
-                    exit_price = max(pos['sl'], candle['open'] + self.spread) if resolved_sl else pos['tp']
-                
-                self._close_position(pos, exit_price - (self.spread if pos['direction'] == 'SELL' else 0), reason)
 
-    def calculate_metrics(self):
+                if pos['direction'] == "BUY":
+                    exit_bid = min(pos['sl'], candle['open']) if resolved_sl else pos['tp']
+                else:
+                    exit_ask = max(pos['sl'], candle['open'] + self.spread) if resolved_sl else pos['tp']
+                    exit_bid = exit_ask - self.spread
+
+                self._close_position(pos, exit_bid, reason)
+
+
+    def calculate_metrics(self) -> Dict[str, Any]:
         if not self.trade_history:
             return {}
 
         df = pd.DataFrame(self.trade_history)
-        
         total_trades = len(df)
         winning_trades = df[df['pnl'] > 0]
         losing_trades = df[df['pnl'] < 0]
-        
+
         win_rate = (len(winning_trades) / total_trades * 100) if total_trades > 0 else 0
         gross_profit = winning_trades['pnl'].sum() if not winning_trades.empty else 0
         gross_loss = abs(losing_trades['pnl'].sum()) if not losing_trades.empty else 0
         net_profit = gross_profit - gross_loss
-        
+
         profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0.0)
-        
-        # Calculate Max Drawdown based on equity curve
+
         peak = self.equity_curve[0]
         max_dd = 0
         for equity in self.equity_curve:
@@ -312,11 +325,10 @@ class BacktestEngine:
             dd = (peak - equity)
             if dd > max_dd:
                 max_dd = dd
-        
+
         avg_win = winning_trades['pnl'].mean() if len(winning_trades) > 0 else 0
         avg_loss = abs(losing_trades['pnl'].mean()) if len(losing_trades) > 0 else 0
 
-        # Calculate winning and losing streaks
         max_win_streak = 0
         max_loss_streak = 0
         curr_win_streak = 0
@@ -335,17 +347,13 @@ class BacktestEngine:
             else:
                 curr_win_streak = 0
                 curr_loss_streak = 0
-                
-        # Advanced Metrics
+
         win_rate_dec = win_rate / 100.0
         expectancy = (win_rate_dec * avg_win) - ((1 - win_rate_dec) * avg_loss)
         avg_rr = (avg_win / avg_loss) if avg_loss > 0 else 0
-        
+
         std_pnl = df['pnl'].std()
-        sharpe = (df['pnl'].mean() / std_pnl * np.sqrt(len(df))) if std_pnl > 0 else 0
-        
-        df['duration'] = (df['exit_time'] - df['entry_time']) / 60.0 # Duration in minutes
-        avg_duration = df['duration'].mean() if not df.empty else 0
+        sharpe = (df['pnl'].mean() / std_pnl * (total_trades ** 0.5)) if std_pnl > 0 else 0
 
         return {
             "total_trades": total_trades,
@@ -361,6 +369,5 @@ class BacktestEngine:
             "max_losing_streak": max_loss_streak,
             "expectancy": round(expectancy, 2),
             "avg_rr": round(avg_rr, 2),
-            "sharpe_ratio": round(sharpe, 2),
-            "avg_trade_duration": round(avg_duration, 1)
+            "sharpe_ratio": round(sharpe, 2)
         }

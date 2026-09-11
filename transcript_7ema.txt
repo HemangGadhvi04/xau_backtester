@@ -1,0 +1,787 @@
+0.3s: Very good evening, everyone.  Berlin this Side.
+2.3s: Welcome to the sixth video of the Berlin Mindset series.
+4.7s: a very warm welcome to the sixth video of 
+7.8s: The Berlin Mindset series.
+9.3s: The Topic of this video is Seven EMA?
+15.1s: now you might ask a question
+19.2s: why 7 EMA?  Why not 5 EMA, why
+22.0s: not 6 EMA, why not 8 EMA, why not
+24.8s: 15 EMA and why not 20 EMA?  Well, the answer
+28.1s: is very simple that I have used
+29.6s: only two EMAs in my trading method till date.
+33.0s: One is 7 EMA and the other one is 30 EMA.
+38.4s: I used to use the 30 EMA first.  Then I included 7
+41.1s: EMA and after including 7 EMA everything
+44.6s: changed totally.  Why?
+47.4s: Because I consider it now one of the
+50.2s: most important moving averages.  ok!
+53.6s: That is why I am including 7 EMA to the
+58.2s: Berlin Mindset series.  ok!  To the TBM series.  ok!
+62.2s: Now let us understand
+63.8s: what we are going to clear in this video.
+65.5s: Got it?  So 7 Ema. First thing is
+73.0s: what is 7 EMA . Ok.
+76.2s:  what is 7 EMA?  You know it very well
+80.4s: that if I have to explain only EMA then
+85.2s: I will go to indicators in the chart
+87.0s: and add EMA and
+88.6s: show that yes this is EMA.  
+91.7s: You have to use like this in some way.  
+93.8s: You have to make entry here and exit here.
+96.3s: I can just say that
+99.6s: and I can just finish the video.
+101.8s: But it is not like that.  We will understand all the things.
+104.4s: What is it? What is Basis?  ok!
+107.4s: What is 7 EMA?  ok!
+109.9s:  First is what is 7 EMA then second is
+115.6s: what is the use of 7 EMA.  ok!
+121.8s:   why do we use 7 EMA? 
+124.7s:  that's the second point which we will understand.
+127.5s: third point is
+131.5s: What is the best time to use 7 EMA.
+141.6s: ok!  When is the best time to use 7 EMA. Ok.
+147.4s: now fourth point is
+151.2s: How To Make Entry And Exit
+160.3s: Using 7 EMA.  Got it?
+164.8s: Fifth and last will be
+168.5s: When Not to Use 7 EMA.
+176.0s:   ok!  If you understand this much then I can tell you
+179.4s: that you will master it.  ok! 
+182.1s:  First, what is the 7 EMA?  ok!
+185.6s: Then what is the use of 7 EMA?  
+188.5s: Why do we use 7 EMA?  ok!
+191.6s: When is the best time to use the 7 EMA?
+195.4s: When should we use 7 EMA?
+198.5s: Then how to make entry and exit using 7 EMA?
+201.8s: How to enter and exit a trade
+203.8s: using the 7 EMA?
+206.0s: When not to use the 7 EMA?  
+208.2s: Now the points that I have written here must be telling you
+210.6s: that when I am writing these things so briefly.
+213.6s: ok!
+216.8s: What is the use of that?  When is the best time?
+221.0s:  And when not to use it?  These points must be telling you
+224.1s: that I have been using this thing for a long time.  
+226.6s: Only then will I be
+229.0s: able to explain these points to you.  ok!
+232.2s: When to use it, when not to use it
+234.6s: , how to make the entry.  ok!
+237.0s: And then what kind of traps can be seen
+240.1s: , what can happen.  ok!  
+242.5s: We will understand all the things briefly one by one.
+246.5s: Now let's begin with this video to all the
+248.8s: viewers over there.  Those Who Are New and
+250.4s: Those Who Are Old, very Welcome to the sixth
+253.2s: video of The Berlin mindset series.
+255.5s: Let's begin with this.
+258.5s: So,
+261.7s: what is 7 EMA?
+265.7s:   what is 7 EMA?  This is the first point.
+269.7s: Let's remove the 7.  What is an EMA?
+272.3s:  let us understand that.  Then I will explain what 
+275.5s: 7 EMA does?  ok!
+278.3s: What is an EMA?  Look, whether you are
+282.3s: trading any stock, any index
+286.6s: or you are
+289.7s: trading crypto, Forex, commodities, anything.  ok!
+295.1s: if it is a stock then it would be
+297.5s: HDFC Bank, ICIC Bank, Axis Bank, if it is an
+300.2s: index then it would be NIFTY, Bank NIFTY, SENSEX, if it is
+303.0s: crypto then it would be Bitcoin, Ethereum,
+304.8s: Solana, if it is forex, then it would be pairs of
+309.0s: currencies, if commodities then
+311.9s: gold and silver, okay, everyone's charts are the same, they are
+315.7s: moving in this manner, okay, the only difference is in the
+321.7s: price, all the assets have their own
+325.8s: different prices.  ok!
+328.8s: Now what does a moving average do? 
+330.8s: Like this is one candle formation.  ok!  
+333.6s: After this candle is formed, this closing price.
+341.0s: It records the closing price
+346.0s: after recording the closing prices, it
+348.2s: gives you an average price.
+349.8s: Like it goes like this
+352.9s: it is nothing, it just forms an average price
+358.6s: after calculating the closing prices.
+360.8s: Now it depends on which moving
+363.5s: average you are using.  Then the prices are
+366.4s: reflected differently.  ok!
+368.8s: Suppose you are using 20 EMA or
+375.0s: you are using 15 EMA.  ok! 
+379.0s:  So there will be a difference in prices.
+381.3s: Like using 20 EMA. So what will the 20 EMA do?
+384.1s: What the 20 EMA will do is calculate the closing of each candle.
+390.3s: ok!  Now let us assume that the
+394.5s: closing found here is for Rs 200.
+396.3s: we are trading a stock.
+398.3s: It is available at 190.  It is available at 180. 
+401.6s:  It is available at 170.  It is available at 160.  Ok
+404.2s: Then after that the chart gets reversed.
+407.6s: ok!  And after coming here,
+410.7s: after 160, this 165 or 170
+414.5s: continues like this.  ok!  Now
+417.9s: what will the 20 EMA do here, this 20 is just a
+423.1s: number, okay, now its work is to
+427.0s: record the closing prices of all and
+429.4s: reflect an average price, now
+433.2s: how many candle prices will it calculate
+435.4s: 20 because we are
+438.1s: using 20 as the moving average.
+439.5s: So an average price of the last 20 candles
+441.6s: will be calculated and that
+443.8s: moving average will
+445.8s: be reflected before the next candle is formed.
+447.6s: Like the next candle is completed
+449.8s: okay?  If this candle is completed at this price,
+453.4s: then the next candle that is about to form will
+457.1s: start from here.
+458.3s: But the moving average will remain here.  ok!
+462.1s: How did this moving average get here?
+465.0s: When the average of the closing prices is calculated,
+467.7s: whatever EMA you are using,
+470.0s: like we are using 7 EMA from here, then
+472.1s: 1 2 3 4 5 6 7 8, okay, 
+480.3s: now the average price of 7 candles,
+484.8s: after the closing, after the average is calculated,
+488.1s: this moving average will come directly there.
+491.4s: ok!  And now understand this thing that
+494.7s: wherever this form is formed, 
+497.0s: whatever average price it gives, let us assume that
+500.2s: the closing is at 190.  ok!  And the average
+504.6s: price came out to be 195.
+507.5s: So why is this important?  
+509.8s: Why is this 195 important?  
+511.9s: This 195 is important because
+514.2s: reversals happen quickly from the average area.
+518.6s: The entries are made there.
+521.1s: ok!  Or this price is the SL of many people
+524.2s: and suppose if it
+526.3s: breaches then that indicates that
+528.6s: whatever average price was forming till now,
+532.0s: its breakout has been achieved and then there are
+537.0s: chances of the movement shifting after that.  Got it?  
+538.7s: I hope it is clear what an EMA is and what
+540.7s: we are trying to do with the 7 EMA.  
+543.1s: We are using 7 EMA because it
+545.2s: gives us an average price of the last seven candles and
+547.2s: we can use it on any time frame.
+551.1s: So, there will be different differences in prices.
+553.0s:   we will use the 7 EMA on majorly two
+555.3s: time frames.  One is for 1 hour and the
+557.8s: other is for 15 minutes.
+562.1s: I hope it is cleared what is an EMA is ok!
+564.4s: I have explained it in very easy language and
+566.3s: I will get it revised once again.
+569.0s: Whatever the asset, everyone has their own price.
+571.6s: Some candles keep forming in this manner.
+574.7s: candles are formed in this manner and the
+578.2s: closing price of each is recorded.
+581.3s: Here it is not the case that every candle is
+583.1s: is negative. The real charts are
+585.5s: little different.  This is how price is closed.
+587.6s: After this the candle is closed like this.
+589.4s: Then it closes like this.  
+591.3s: And then it closes something like this.
+593.3s: So an average of the closing price of all these is obtained.  Ok
+597.6s: and this average price is
+599.7s: important.  Why is it important?
+601.7s: because at this price we
+604.2s: can go to follow the trend.
+606.0s: A momentum shift can be seen after this price breakout.
+609.1s: ok!  So that is why this
+611.3s: average price is important.  Got it?
+613.8s: So, I hope it is clear
+616.0s: what a moving average is or
+618.3s: why we are using 7 EMA.
+619.8s: Let's let's move to second point.
+621.8s: So, the second point is
+624.4s: what is the use of 7 EMA?
+633.6s:  what is the use of 7 EMA?
+637.9s:  It has two simple uses.
+640.0s: The first is momentum following
+645.7s:  and the second is
+649.3s: trend following.
+652.2s: The first one we use is for momentum following.
+655.2s: As I told you, an average price comes out.
+657.1s: Only two things can happen with that average price.
+660.3s: If it breaks, then that indicates that the
+662.6s: momentum is shifting and if there is a
+664.9s: rejection from there, then that indicates that the current
+667.2s: momentum is going to continue.
+669.6s: ok!  So that is momentum following
+672.0s: and the other is for trend following.
+674.2s: It rarely happens that if a sharp trend is going on,
+677.9s: then in a sharp trend, if a
+680.6s: sharp trend is going on in this manner, then it
+684.0s: very rarely happens that the price
+686.2s: breaches the 7 EMA.  ok!  
+692.2s: Why I consider it one of the
+695.9s: strongest EMA. The reason is that it is very
+700.2s: accurate for trend following.
+702.4s: meaning, whatever average prices are given by it
+707.3s:  whatever average price is calculated.  ok!
+711.8s: a sharp entry can be made from that point.
+715.8s: From that point the trend can be followed.
+717.6s: From that point, momentum can be followed.
+720.3s: ok!  Now whatever average
+724.3s: price comes out of this; I found it that
+728.3s: in trend following there is nothing better than this EMA
+734.2s: so we are going to use EMA for two things
+737.0s: first one is for momentum following
+738.0s: and the second one is for trend following.
+740.2s: ok!  Now why does this happen?
+742.7s: Why?  Because it is calculating recent data.
+746.1s: Calculating recent prices.  ok!  If prices are
+749.4s: breaching, that shows that there is
+753.2s: a good amount of momentum built up on the other side.
+756.0s: Due to this, the current trend that was
+758.3s: coming has breached and
+761.4s: closed above the price.  So that will be called as
+765.0s: shift.  Momentum shift.  ok!
+768.6s:  So we will use the 7 EMA for two things.  
+771.4s: The first is for momentum following.  The second is
+773.2s: for trend following.  ok!  Now let us move on to the third point.
+778.8s: ok!  So let us clear the third and fifth points.
+782.9s: And then after that we will
+784.1s: understand the fourth point briefly.
+786.2s: In the fourth point I have to explain entry and exit.
+789.1s: That's why I am
+790.2s: keeping it for last.  Why?  Because we will stretch it a little.  
+792.7s: Don't worry.
+794.1s: I will not explain there that this EMAs are
+796.6s: 7 EMAs.  ok!  And how to make a 7 EMA entry?
+799.9s: When the price reaches here and is
+802.5s: rejecting, then place the SL above and
+804.6s: keep the target here.
+807.4s: No, I will not explain this.  ok!
+809.7s: You also know that when we follow an EMA, we
+812.4s: make entry only when the
+815.2s: price is going on the EMA.  Isn't it?  
+818.0s: So I am not going to tell anything like this there. 
+820.3s: There I am going to
+821.4s: provide some rules which are very important.
+823.1s: Those rules will keep you on the right side.
+827.6s: ok!  Those rules will help increase the accuracy of the trade.
+831.5s: First and second, you should mostly be on the right side.
+835.8s: ok!  Stay on the right flow.  Got it?
+839.5s: Everyone knows this thing, friend, what's so big about it?
+843.3s: Now let's begin with the third and fifth points.
+847.7s: what are the third and fifth points?
+849.3s: The third point is what is the best time to use seven EMAs?
+858.4s: The third point is what is the best time to use seven EMAs?
+867.4s:   the fifth point is just its opposite,
+871.3s:  when not to use 7 EMA,
+877.8s: okay, one point will tell you
+881.7s: which is the best time and the 
+883.6s: other will tell you when not to use it.  
+886.9s: ok!  Now you should Understand by looking at these points
+890.2s: how important theory is.
+891.9s: If I do not tell these parts and if
+894.6s: people who are skipping this part, if they are
+897.6s: skipping the first 10-15 minutes of the theory part, 
+900.9s: then they will miss these things.
+902.9s: All they want to know is what the strategy is.  ok!
+906.2s: If I apply 7 EMA in the chart, then it will simply
+908.0s: go to the chart and apply it.  
+910.1s: And that's it.  The Rest they knows themselves.  
+913.8s: No, one thing matters.  That is experience.
+916.8s: All these things come from experience as to
+919.0s: when is the right time and when not to trade.
+921.4s: ok!  And what rules to follow for entry and exit.
+925.8s: ok!  So that is why the theory is important.
+928.5s: and I believe that the members who have
+930.0s: been following TradeLikeBerlin for a
+931.6s: long time will not skip the theory at all.  ok!
+935.0s: Now let us understand what is the best time?
+937.3s: Look, you will understand these two.  
+940.0s: So the accuracy of the trade will increase.  
+943.0s: Failures will reduce.  You will know in advance
+945.7s: when I should trade and when I should not.
+949.0s: ok!  When is the best time?  
+952.7s: When the market is trending.
+956.2s: When the market is trending.
+959.8s: Like this.  A sharp trend is needed.
+965.3s: Trend Got It?  A sharp trend is needed.
+968.6s: Whether it is down or up.  
+972.0s: We need sharp trends.  Got it?  
+976.4s: Now on which time frame will we see this trend?  
+980.2s: Just use the 15 minute time frame.  ok!  
+983.3s: The 15 minute time frame is to be used to spot a trend.
+986.5s:   if the market is trending on the 15-minute time frame,
+991.1s: that's a time to use the 7 MA.  
+995.4s: That's the best time to use the 7 EMA.  ok!  
+998.5s: Now,I will tell you how to do entry and exit
+1002.1s: in the next point or you will
+1005.4s: understand it in practical also.
+1007.5s: But when is the best time?  When the market is trending.
+1009.7s: What time frame should be trending on?
+1011.7s: It should be on a 15-minute time frame.
+1013.4s: Got it?  Now This Is The Best Time To Use The
+1017.8s: 7EMA.  We have to use it in trending markets.
+1020.5s: When to avoid it?  When Not to Use 7 EMA.
+1023.1s: When the market has no direction.
+1027.5s: When the market is moving like this.
+1029.7s: ok!  When you are continuously
+1032.2s: looking at this moving average, when
+1035.1s: the price is continuously going above it,
+1036.8s: coming below it, going above it, coming below it
+1038.4s: , going above it, coming below it.  
+1040.2s: At this time we have to avoid using 7 EMA.
+1043.8s: We will understand this thing more clearly in practical.
+1048.1s: Keep one thing in mind, keep repeating, keep repeating, keep
+1051.3s: repeating that when do I have to apply 7 EMA, 
+1054.3s: I have to wait for the condition,
+1055.8s: what kind of condition, where the market is
+1059.4s: following a good trend, okay, if this is a
+1062.6s: 15 minute time frame, okay, then we have to
+1066.6s: see that the market is
+1069.3s: in a sharp trend, we have to wait for this opportunity,
+1074.2s: okay, if a sharp trend is found, then we will
+1077.6s: create the entry by looking at the 
+1081.2s: sharp trend on the 15 minute time frame. Got it?
+1085.4s: Now the question of many people will be that
+1087.4s: in which instrument can one trade?
+1089.3s: I'm telling you to use any instrument you want.
+1091.8s: Especially if you
+1097.0s: apply it in gold,
+1100.1s: it will work very beautifully.
+1103.9s: Now how to avoid the market?
+1107.1s: When you can't see any direction.
+1109.2s: Like, the markets are falling in this way
+1110.7s: but they are also rising in this way.
+1113.0s: What is there here is that the 
+1115.0s: direction of the market is not there.  Avoiding this market.  
+1119.6s: So I hope you will remember these two things.
+1122.7s:   use 7 EMA
+1124.5s: when the market is trending.  Avoid 7
+1126.9s: EMA when the market is not having any
+1130.2s: direction.  Got it?  Note both of these down.
+1133.4s: use the 7 EMA when the
+1142.7s: market is trending?
+1149.7s: avoid 7 EMA
+1154.9s: when there is no direction? 
+1164.9s: When should I use the 7MA?
+1167.9s: When the market is trending.  When to avoid it?
+1169.9s: When there is no direction in the market.
+1171.8s: 7 EMA has to be used in this market
+1174.4s: and 7 EMA has to be avoided in this market.
+1177.8s: Tick ​​Tick Got It.  Now let us move on to the entry
+1182.3s: and exit points and let me explain some rules.
+1187.0s: Ok.  So now let's begin with the fourth and
+1189.2s: the most important point.
+1191.4s: How to Make Entries and Exits
+1201.0s: Using the 7 EMA.
+1204.7s:  how to take entry and exit using 7 EMA.  
+1207.5s: There is a common method
+1209.0s: and a very basic method that everyone will know
+1212.0s: if it is a moving average.
+1215.3s:  And the prices are
+1217.1s: going something like this below it.
+1220.4s: Now suppose that after the price of this asset
+1225.2s: comes in this candle, if the
+1227.9s: low point of this candle is around 200 and if the moving
+1231.1s: average has given an average price
+1234.3s: of 210, then in the next candle if the price
+1238.5s: retraces this moving average
+1243.1s: which is 200 and attempts to reach 210,
+1245.4s: then this will be a very good area to
+1248.9s: enter, okay?  We will understand this thing
+1252.0s: practically and this thing will tell us
+1255.2s: where to place the entry and
+1256.7s: where to place the exit.  I am going to tell you here
+1258.2s: that I will give you a rule.
+1261.1s: this rule will keep you on the right side.
+1269.3s:   the first thing it will do.   
+1270.8s: The second one will get you
+1272.8s: bigger targets.  ok!  Tell me one thing
+1278.2s: if the river is flowing in this manner.
+1280.8s: ok!   Can
+1282.9s: you swim against it on this side?
+1285.7s:   is it possible for you?  You can swim a little distance.
+1289.0s: If you are here then you will come here from here.  
+1291.0s: So, you can't go very far, can you?
+1293.1s: Is it possible?  Not there.  But on this river, if
+1297.1s: you swim towards this side, it means you are
+1299.0s: going towards this side.  If you swim towards this side,
+1303.3s:  you can go very far.
+1306.6s: ok!  This will work.  This is the right side
+1310.1s: , if you stay on the right side you will
+1311.8s: get big targets.  If you stay on the wrong side,
+1314.1s: you will not get big targets.  ok!
+1316.6s: Now how to stay on the right side?  
+1318.5s: By following this rule. What is the rule?  
+1324.2s: The rule is to use hourly Time frame for
+1330.7s: The rule is to use hourly Time frame for
+1333.0s: deciding the side of entry.  ok!
+1339.6s:   hourly time frame has to be used
+1341.9s: to decide the entry side.
+1346.0s: To decide on which side to make an entry, 
+1348.2s: the hourly time frame has to be used.
+1350.2s: If it is an hourly time frame,
+1353.5s: suppose this is a one-hour time frame.  ok!
+1356.2s: And these candles are moving.  ok!
+1359.2s: On the hourly time frame, if these candles
+1362.1s: are below the 7 EMA then only look for
+1369.4s: bearish entries in the 15 minute time frame.  ok!
+1377.8s: All right, I am repeating it again.
+1379.3s: Listen carefully.  
+1380.1s: If the price is trading below the 7 EMA on the hourly time frame,
+1388.9s: then we have to plan entry
+1392.4s: only on the bearish side on the 15-minute time frame.
+1396.9s: ok!
+1398.0s: Suppose it could be like
+1400.3s: this EMA on the hourly time frame, okay?
+1403.4s: The price is trading below this.  But on a 15 minute
+1405.1s: time frame, it is possible that the price may be
+1407.3s: trading above that.  ok!
+1409.4s: This has to be avoided.  These setups are to be avoided.
+1411.5s: Which side should we enter
+1414.0s: when the price gives us an opportunity on the bearish side.
+1417.1s: ok!  Why?  Why are we going for the bearish side?
+1420.2s:   because the price is below the hourly time frame of 7 EMA.
+1423.9s: hence we will make an entry for the bearish side.
+1427.2s: Just do the opposite of that for the bullish side.
+1430.5s:  Let me also tell you about the bullish side once.
+1432.6s: When to enter on the bullish side?
+1434.0s: When on the hourly time frame?
+1437.6s: When the price on the hourly time frame
+1443.7s: is trading above the 7 EMA of the moving average, 
+1448.5s: in this way on the 15 minute time frame we will
+1454.3s: look only for bullish entry,
+1457.3s: if you suppose that in the hourly time frame
+1459.7s: you saw that the price is
+1464.0s: trading above the 7 EMA.  ok!  And as soon as you
+1467.4s: open 15 minutes, you
+1468.8s: see that the price is
+1472.8s: trading below the 7 EMA.
+1476.8s: There may have been some retracement or the
+1479.1s: momentum may have stopped.  
+1481.5s: Due to this the price has come below the 7 EMA.  
+1483.9s: This entry has to be avoided.  ok!
+1485.0s: When to take entry? 
+1486.3s: when the price moves above the 7 EMA in 15 minutes.
+1489.8s:   ok!  And then go there and
+1492.7s: wait for a retest and make an entry.
+1494.6s:   now let us understand entry and exit a little
+1499.4s: more briefly and in brief let us understand where it goes
+1503.7s: by going to the practical charts.  Got it?  
+1506.3s: Let's start the practical.  
+1507.6s: And then we end this video.  That's all.  ok!  
+1510.4s: So, now let's begin with the practical part.
+1512.0s: In this practical part, we will take three-four
+1513.4s: examples so that it becomes clear how to take entry
+1515.9s: and how to take exit.
+1518.2s: First thing.  Secondly, whatever we have
+1520.6s: learnt in theory, how to
+1522.5s: apply the rules, we will understand that
+1525.0s: in this practical part.  ok!  And then
+1527.8s: after that we will end the sixth video of this TBM series.
+1532.3s: Got it?  Now
+1534.4s: what is the first thing that comes to mind that I mentioned?
+1538.0s: The first thing we need to know is which market to
+1540.5s: trade?  Do we want to trade in this market
+1543.6s: we need a trending market.
+1547.0s: Whether it is upside trending or downside trending.
+1548.6s: What we need is trending market.  ok!
+1555.3s: We have to plan for entry into the trending mark market.
+1557.7s: ok!  Now suppose I
+1559.4s: saw a trending market in front of me , it is a
+1561.4s: bullish market and it is trending.  
+1563.9s: But the time frame is open for 15 minutes.  
+1565.8s: So will I make an entry?  No.  We have to open the
+1568.8s: hourly time frame to make an entry on the right side.
+1571.3s: Now what is the rule of hourly time frame
+1573.3s: if it is a moving average on an hourly time frame.
+1575.2s: If the price is below the
+1577.2s:  moving average on the hourly time frame, I will
+1580.5s: plan an entry on the bearish side.  If the
+1583.0s: price on the hourly time frame is
+1586.8s: above the moving average then I will
+1590.6s: plan a bullish entry.  In which?  On a 15-minute
+1593.3s: time frame.  I hope this simple thing will be
+1595.4s: clear.  Now let's start this session.
+1597.9s: To the practical session.
+1600.5s: Moving average is not added here.
+1602.1s: So let me add the moving average here.
+1608.2s: Here I have added the moving average.
+1612.1s: This is Nine EMA here.
+1615.3s: So let me change this.  First of all,
+1618.3s: you can also change it by going to settings. If by
+1621.8s: mistake any other EMA appears like
+1625.0s: 30, 21, anything, then go to settings and 
+1628.2s: go to input and change it to 7 and you
+1632.5s: can keep the color whichever you like.
+1635.0s: Ok so here you can see my 15-minute time frame is open.
+1637.0s: So I will not take entry after seeing this.
+1639.3s: So I will be opening the
+1641.4s: hourly time frame and after opening the hourly time frame let us
+1645.8s: see whether we get any entry or not.
+1648.2s: Now one thing I want to mention from the beginning is
+1652.1s: that we are doing back-testing here.
+1654.5s: ok!  So whatever SLs are hit,
+1657.3s: note them down to see how much we are losing in SL
+1661.5s: and how much we are earning in profit.
+1663.2s: ok!  If there is loss in SL then pay attention to
+1665.3s: how much loss is there and how much profit is in profits
+1667.9s: then pay attention to how much profit is being made.
+1671.0s: Ok let's start now.
+1673.4s:   so here it can be seen
+1675.4s: that the current price is below the moving average.
+1677.9s: I wait for the
+1683.5s: price here to take a direction. 
+1686.3s: If I wanted to be on the bearish side,
+1687.6s: I could have made an entry here.  
+1690.1s: But let's let the price settle for a while
+1692.6s: and see what happens next.
+1696.9s: Now here you can see that the price has given an
+1701.6s: upside breakout.  It can be seen here that
+1702.9s: an upside breakout has been observed and the
+1705.6s: price is now trading above the 7 EMA
+1708.4s: on the hourly time frame.
+1710.4s: So we have to look for entry on the bull side.
+1712.2s: I will switch to the 15-minute time frame to look for entries on the bull side.
+1713.7s: And after going to the 15 minute time frame
+1723.3s: I will plan an entry.
+1726.4s: Let's see whether I get any entry or not.
+1733.5s: This is a good entry.
+1737.6s: Okay, and if I look here to long. 
+1739.8s: If I go long here
+1742.1s: and place SL below this low, I am
+1745.6s: getting an SL of 35 points.  Will I get a
+1747.8s: target of 70 points or a
+1751.3s: target of 105 points?  It will be 1:3 here.
+1753.5s: ok!  So let's see what we're
+1756.0s: going to get 1:3 or not.
+1797.5s: Ok.  So, after the market got stuck at a very choppy zone,
+1802.4s: I got the target at the end.
+1804.8s: It's good that my SL did not go into this choppy zone. 
+1810.3s:  and in such choppiness
+1811.5s: though I cut the trade.
+1813.3s: I avoid it.  But still I had to run.  
+1816.8s: I had to show what happens here.
+1818.1s: So I held it as it is.
+1820.2s: ok!  Now let's plan the second entry
+1822.3s: using the same setup.
+1825.5s: Let's see if we get any attempt at moving average again.
+1828.5s: I'll cut it once and see if
+1832.3s: I get another attempt at the moving average.  
+1833.6s: It looks like
+1835.1s: I've got one attempt
+1838.6s: and I'm going to go long here.
+1842.1s: The SL is of 15 points.
+1845.3s: I will keep the target at 45 points or I
+1847.9s: can keep it at 60 points for 1:4. 
+1850.9s: This is 1:4. ok!  
+1854.2s: Now let's see whether we get 1:4 or not.
+1862.6s: Ok.  So here I have got another target of 1:4.
+1866.5s: ok!  Keep taking notes with me about the
+1868.3s: targets I am setting here.
+1871.1s: Just a second let me connect my pen.  ok!
+1874.2s: So keep noting here that the
+1876.6s: targets I am setting are based on RR.
+1879.1s: ok!  I am looking at the SL first to see
+1881.1s: how much the SL is.  Like
+1882.9s: I entered here.  So here I saw how much SL is.
+1885.7s:   if I see ah SL small, I'll increase the target.
+1890.4s:   ok!  For example, suppose here I was
+1892.4s: getting SL of 15 points.
+1894.2s: I did it 1:4. 1:3 did not.  ok!  I could have done 1:5 also.
+1897.2s: Look at this thing here that what
+1899.4s: I am looking at first I am looking at
+1901.3s: what is SL.  ok!  And then
+1903.5s: after that I am setting risk to reward. 
+1908.1s:  i would generally target 1:3 and I would target 1:4.
+1912.2s: ok!  And if I get good cases then
+1914.2s: I can also go for 1:5. I Hope it is cleared.
+1917.0s:   now let's continue running
+1919.8s: and see what happens.
+1922.5s: Now see how you can easily get targets
+1925.4s: in the market when the market is trending.
+1927.1s:   ok!  You will easily get the target in the trending market
+1930.9s: and there will be a lot of frustration in the choppy market.
+1933.1s: ok!  But still SL is SL you will have to respect the SL.
+1937.8s:   now let's cut it.  And now let's
+1941.4s: reverse this thing.  Now let us wait for
+1944.1s: a bearish kind of scenario to emerge.
+1948.8s:   if we find a bearish market,
+1950.6s: we will look for entry on the bearish side.
+1954.8s: ok!
+1957.0s: For the bearish side, a closing below the 
+1959.1s: moving average should be achieved.  
+1961.9s: If we get it then it will be good for us.
+1967.0s: Ok.  So it can be clearly seen here
+1969.7s: that closing has been achieved on the bearish side.  
+1972.5s: Look at this candle we got closing below the moving average
+1976.6s: on the hourly time frame.  
+1978.4s: We will go in 15 minutes and on which side will we
+1981.0s: plan to enter?  We will plan entry on the bearish side.
+1983.9s: ok!
+1985.8s: As it can be seen, this candle has
+1988.5s: closed below the moving average.  
+1990.6s: So right here, I see an entry.
+1992.6s: I will not do anything here.
+1995.5s: After taking entry here, I will see
+1998.1s: how many points the SL is worth.  SL of 35 points is visible.
+2000.0s:   i would target at least 1:2 in this.  
+2004.7s: Let's see if we get 70 points or not.
+2010.3s: ok!  So here I have got 1:2
+2013.5s: quickly.  ok!  Now we will wait for more
+2015.8s: entries.  Look, understand this thing.  
+2018.7s: This is a back test.  ok!  
+2020.3s: Things will definitely look easy here. 
+2022.7s:  I accept in front of you that when the market is live,
+2026.4s: things change.  Understand my point
+2028.6s: carefully that you have to wait for the closing.
+2031.0s: ok!  When we get the closing then we will
+2033.7s: get confirmation that yes we can go to that side.
+2035.7s: If you are watching any of my entries, 
+2037.7s: you will see that I
+2038.7s: am waiting for the previous candle to close.
+2040.3s: I got closing here and then
+2041.7s: I made 1:2 plan.  SL was big so
+2043.8s: planned 1:2.  ok!  Now let's see if
+2046.2s: I get more entries or not.
+2051.5s: Here you can see that it is clear that 
+2055.5s: the breakout has been achieved and
+2057.1s: why can't I make an entry for the upside?
+2059.2s: Because in the hourly time frame, the
+2061.3s: market is moving below the moving average.
+2063.7s: Therefore, I cannot make an entry on the bullish side.
+2065.9s: I will continue.
+2068.6s: Now I've got another entry here.
+2074.9s: ok!  I will enter at this closing.
+2077.5s: This is where my SL will be.
+2080.2s: How many points of SL are you getting?
+2081.4s: Again getting SL of 35 points.
+2084.0s: Keeping the SL at 35 points, let us target 105 points here.  
+2087.4s: Let's see whether we achieve this target or not.
+2106.2s: You see how beautifully it is respecting .
+2108.1s: this is almost our target achieved.
+2110.1s:  ok!  I almost got it and got it in full the next day.
+2114.4s: what I want to show here is that
+2116.8s: you can bring any EMA.  ok!
+2119.1s: All I am saying is that you can't get
+2120.8s: better than the 7 EMAs to capture the trend.
+2123.8s: ok!  I like I once revealed 7 EMA.
+2126.5s:   for this reason,
+2128.6s: I have made a complete video dedicated to it.
+2130.5s: Otherwise I don't think I would have
+2133.0s: revealed 7 EMAs.  ok!
+2135.7s: But I had put in Trade Like Berlin that
+2139.1s: start using 7 EMA.  There are some reasons for that.
+2141.5s: ok!  That's why I even made a dedicated video on this.
+2146.8s:   now here's a look at how beautifully
+2154.0s: the EMA is being respected.
+2156.0s: Look at this thing here, how well the market is
+2158.2s: respecting it.  ok!  
+2159.8s: Now let us see if we
+2161.1s: get any more entries or not.  As it can be seen here
+2162.3s: that this candle has got rejection and
+2165.0s: a bullish candle is being formed.  ok!  
+2167.8s: So let's see if we
+2170.1s: get another entry.  For example, if I have
+2172.9s: made an entry here and if my SL is again the same
+2175.8s: 40 points, then I will see whether I will get a
+2178.2s: target of 80 points or my
+2181.3s: SL will go there.  Lets see.
+2186.1s: Ok.  So look at this. SLs will also be taken.
+2190.0s: Now we cut on SL.
+2192.5s: Once again, if I get a closing on the downside,
+2194.2s: which I see here, I have,
+2195.8s: then I will enter again
+2200.2s: like this.  Entering here
+2204.6s: again an SL is quite large.
+2207.0s: But still I will be entering for 1:2 at least.
+2210.3s: Let's see what happens.
+2214.6s: Why did I enter?  
+2216.0s: Because I got closing under it.  ok!
+2217.9s: Got closing.  For this reason I have re-entered.
+2220.6s: Otherwise, I don't enter.
+2225.0s: And again the market caught the trend.
+2228.0s: after catching the end trend, let us see
+2230.3s: whether this target is achieved
+2232.2s: or not.
+2239.0s: So finally we got the target.  Ok.
+2242.2s: Now when is this thing running properly?
+2245.8s: When the market on the hourly time frame is
+2248.7s: continuously moving down.  
+2250.9s: below the moving average.
+2252.9s:   that is why I said that only when you
+2254.5s: understand and listen to everything,
+2258.0s: things will work out better.
+2259.8s: Let's try a few more entries.  Like if we get
+2263.0s: any entry again, if we get an attempt then we will
+2265.0s: take it and see how it goes.
+2277.4s: Ok.  So here I see that I
+2279.6s: see another entry here.
+2283.4s: Ok.   Let's See what happens here.  
+2287.5s: Again there is a small SL of 25 points.
+2290.2s: Now here I will target around 75 points.
+2294.6s:   ok!   Let's see what happens. 
+2298.9s: If we get the closing, then we will go above it.
+2301.8s: closing is not available yet.  I would still
+2304.8s: hold this trade because I had
+2306.5s: not got the closing yet.  ok!  If you
+2309.4s: look here, the target has been achieved.
+2311.9s: ok!  So, always remember that
+2314.8s: if spikes occur, then spike pay wait
+2317.5s: for closing.  We need closing.
+2319.5s: Whatever SL you have planned above SL, you will get
+2321.1s: closing above that then exit, then go for exit.
+2323.0s:   you are looking here again.
+2324.8s: Then another entry has been found.
+2329.0s: Like this is a pretty big SL so
+2331.0s: I won't enter right now.  Will wait,
+2343.8s: we now have another one here, let me see what
+2350.2s: happens here.
+2353.0s: How big is the SL and then after that I will plan
+2360.3s: like if I take it here again
+2362.2s: I am going to have an SL of 40 points.
+2364.2s: Let's see whether we get 1:3 or not.
+2382.2s: so look at how beautifully it is working.
+2386.6s:   all you have to do is place a SL and
+2390.2s: look for the trending market.  
+2392.3s: Whatever I have told you, whatever rules I have
+2394.7s: told you, you have to follow them.  ok!
+2397.7s: All you need is strict discipline and rule following.
+2401.3s:   and if you have this, then
+2404.2s: I can tell you that you will make a decent
+2405.9s: amount of money using the strategy.  
+2407.8s: That's all. So that's all for the sixth video of
+2410.9s: the Berlin Mindset series.  All I will say is that if
+2414.1s: the Berlin Mindset series has
+2416.6s: helped you in any way let me know in the
+2419.0s: comments.  If this video also helps then in
+2420.5s: future come and tell me in the comments
+2422.2s: that the videos are helping
+2425.0s: and the Berlin Mindset Series is helping.
+2428.0s: All I can say is that I am trying my
+2429.8s: best to provide all the things which have
+2432.0s: work for me.  Whatever is working for me,
+2434.2s: I am providing it to them as it is.
+2436.0s: ok!  Along with this, 
+2438.1s: I would like to say one more thing that
+2440.3s: focus on gaining knowledge.  Gaining knowledge and
+2442.2s: gaining knowledge.  Keep focusing on knowledge,
+2444.2s: keep moving forward.  ok!  There is a lot of noise.
+2446.9s: Avoid noises.  Focus on yourself
+2449.2s: and just keep going.  ok!  And last but not the least
+2455.6s: I always alert you
+2457.1s: that Trade Like Berlin does
+2458.6s: not provide any schemes.  
+2460.6s: If you want to join TradeLikeBerlin's Telegram channel, then
+2462.7s: join only from the link in the description.   
+2464.4s: If you join from somewhere else, you will get scammed.  
+2467.0s: I am alerting you again.  Trade Like Berlin does
+2468.7s: not do any investment schemes that say give
+2470.9s: 25,000 and you will get 50,000. 
+2473.8s:  Everything is free.  Everything is free at
+2476.3s: TradeLikeBerlin.  Education, knowledge, everything
+2479.9s: is free.  ok!  Everything is free.
+2484.4s: Together we have to go a long way.  
+2485.8s: Will see you in the next video of the TBM series.
+2487.7s:   if you want let me know if you
+2490.8s: want a live session then I will plan for it.
+2493.4s: But Only If I See Enough Response That's All
+2496.6s: and Don't Forget To Like This Video
+2498.6s: Bye. Peace guys.

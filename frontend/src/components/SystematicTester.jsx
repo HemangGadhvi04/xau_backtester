@@ -153,10 +153,12 @@ const SystematicTester = ({ onBacktestSuccess, onReviewTrade, activeSymbol }) =>
                 onChange={(e) => setStrategy(e.target.value)}
                 style={styles.select}
               >
+                <option value="tbm_7ema">7 EMA Final Boss Strategy (The Berlin Mindset - TBM)</option>
                 <option value="ema_cross">Improved SMC + 9/15 EMA Pullback</option>
                 <option value="trend_pullback">9/15 EMA Trend Pullback (Simple)</option>
                 <option value="advanced_smc">Advanced SMC (QML/TJL2 + CISD) ⚠️ Lookahead</option>
                 <option value="geometric_range">Geometric Range Grid (4.618 Fib)</option>
+
               </select>
             </div>
 

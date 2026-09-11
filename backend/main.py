@@ -18,11 +18,26 @@ from core.advanced_smc_engine import AdvancedSMCEngine
 from core.msb_ob_mtf import MSBOBMTFEngine
 from core.indicator_framework import IndicatorContext, indicator_registry
 import core.builtin_indicators  # Registers built-in indicators.
+from core.replay.engine import ReplayEngine
 from backend.data_service import get_market_data
 from backend.config import SYMBOL_CONFIGS
 from backend.database import engine, Base, get_db
 from backend import models, auth
 from fastapi.security import OAuth2PasswordRequestForm
+
+# Active Replay Engine Instances (per user & symbol)
+REPLAY_ENGINES: Dict[str, ReplayEngine] = {}
+
+def get_or_create_replay_engine(user_id: int, symbol: str = "XAUUSD") -> ReplayEngine:
+    session_key = f"user_{user_id}_{symbol}"
+    if session_key not in REPLAY_ENGINES:
+        engine = ReplayEngine(session_id=session_key, symbol=symbol)
+        candles = get_market_data(symbol=symbol, timeframe="1m")
+        if candles:
+            engine.load_data(candles)
+        REPLAY_ENGINES[session_key] = engine
+    return REPLAY_ENGINES[session_key]
+
 
 # Initialize Database tables
 Base.metadata.create_all(bind=engine)
@@ -47,9 +62,25 @@ app.mount("/api/screenshots", StaticFiles(directory=SCREENSHOTS_DIR), name="scre
 
 # ----------------- PYDANTIC SCHEMAS -----------------
 
+class ReplayStepRequest(BaseModel):
+    count: int = 1
+
+class ReplaySeekRequest(BaseModel):
+    target_index: Optional[int] = None
+    target_timestamp: Optional[int] = None
+
+class ReplayOrderRequest(BaseModel):
+    direction: str
+    order_type: str = "MARKET"
+    lots: float = 0.10
+    price: Optional[float] = None
+    sl: Optional[float] = None
+    tp: Optional[float] = None
+
 class UserCreate(BaseModel):
     username: str
     password: str
+
 
 class Token(BaseModel):
     access_token: str
@@ -342,6 +373,57 @@ def status():
 @app.get("/api/symbols")
 def get_symbols():
     return SYMBOL_CONFIGS
+
+# ----------------- AUTHORITATIVE REPLAY ENGINE API -----------------
+
+@app.get("/api/replay/state")
+def get_replay_state(symbol: str = "XAUUSD", current_user: models.User = Depends(auth.get_current_user)):
+    engine = get_or_create_replay_engine(current_user.id, symbol)
+    return engine.get_state()
+
+@app.post("/api/replay/step")
+def step_replay(req: ReplayStepRequest, symbol: str = "XAUUSD", current_user: models.User = Depends(auth.get_current_user)):
+    engine = get_or_create_replay_engine(current_user.id, symbol)
+    return engine.step(req.count)
+
+@app.post("/api/replay/seek")
+def seek_replay(req: ReplaySeekRequest, symbol: str = "XAUUSD", current_user: models.User = Depends(auth.get_current_user)):
+    engine = get_or_create_replay_engine(current_user.id, symbol)
+    if req.target_index is not None:
+        return engine.seek_to_index(req.target_index)
+    elif req.target_timestamp is not None:
+        return engine.seek_to_timestamp(req.target_timestamp)
+    raise HTTPException(status_code=400, detail="Must provide target_index or target_timestamp")
+
+@app.post("/api/replay/order")
+def place_replay_order(req: ReplayOrderRequest, symbol: str = "XAUUSD", current_user: models.User = Depends(auth.get_current_user)):
+    engine = get_or_create_replay_engine(current_user.id, symbol)
+    result = engine.place_order(
+        direction=req.direction.upper(),
+        order_type=req.order_type.upper(),
+        lots=req.lots,
+        price=req.price,
+        sl=req.sl,
+        tp=req.tp
+    )
+    return result
+
+@app.delete("/api/replay/order/{order_id}")
+def cancel_replay_order(order_id: str, symbol: str = "XAUUSD", current_user: models.User = Depends(auth.get_current_user)):
+    engine = get_or_create_replay_engine(current_user.id, symbol)
+    success = engine.cancel_order(order_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"status": "cancelled", "order_id": order_id}
+
+@app.post("/api/replay/position/{position_id}/close")
+def close_replay_position(position_id: str, symbol: str = "XAUUSD", current_user: models.User = Depends(auth.get_current_user)):
+    engine = get_or_create_replay_engine(current_user.id, symbol)
+    closed = engine.close_position(position_id, reason="MANUAL")
+    if not closed:
+        raise HTTPException(status_code=404, detail="Position not found")
+    return {"status": "closed", "trade": closed}
+
 
 # Replay Session State
 @app.get("/api/session")
@@ -677,7 +759,10 @@ def run_systematic_backtest(req: BacktestRequest):
     engine.load_data(candles)
     
     # 3. Instantiate strategy
-    if req.strategy == "ema_cross":
+    if req.strategy == "tbm_7ema":
+        from strategies.tbm_7ema_strategy import TBM7EMAStrategy
+        strategy = TBM7EMAStrategy(ema_fast=7, ema_slow=30, rr_ratio=3.0, lots=req.lots)
+    elif req.strategy == "ema_cross":
         from strategies.ema_cross import EMACrossoverStrategy
         strategy = EMACrossoverStrategy(
             lots=req.lots,
@@ -691,6 +776,7 @@ def run_systematic_backtest(req: BacktestRequest):
             sl_pips=req.sl_pips,
             tp_pips=req.tp_pips
         )
+
         
     # 4. Run backtest
     engine.run(strategy)

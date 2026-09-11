@@ -7,7 +7,7 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.engine import BacktestEngine
-from strategies.macd_adx import MACDADXStrategy
+from strategies.ema_final_boss import EMAFinalBossStrategy
 from backend.data_service import get_market_data as get_xauusd_data
 
 def format_perf_report(metrics):
@@ -31,14 +31,14 @@ def format_perf_report(metrics):
 
 def main():
     print("Loading historical candles via DuckDB OLAP engine...")
-    # Load 5m candles for backtesting
-    candles = get_xauusd_data(timeframe="5m")
+    # Load 15m candles for backtesting
+    candles = get_xauusd_data(timeframe="15m")
     
     if not candles:
         print("Error: No candle data available in data/raw/. Please ensure the downloader is running.")
         sys.exit(1)
         
-    print(f"Successfully loaded {len(candles)} 1-minute historical candles.")
+    print(f"Successfully loaded {len(candles)} 15-minute historical candles.")
     
     # Initialize Backtest Engine
     engine = BacktestEngine(
@@ -50,14 +50,13 @@ def main():
     # Set data
     engine.load_data(candles)
     
-    # Instantiate Strategy (MACD + ADX Pine Script Logic)
-    strategy = MACDADXStrategy(
-        fast_length=5,
-        slow_length=13,
-        signal_length=20,
-        di_length=10,
-        adx_smoothing=14,
+    # Instantiate Strategy (7 EMA Final Boss)
+    strategy = EMAFinalBossStrategy(
+        ema_len=7,
+        htf_multiplier=4,
+        adx_len=14,
         adx_threshold=25.0,
+        rr=3.0,
         lots=0.1
     )
     
