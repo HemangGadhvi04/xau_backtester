@@ -45,8 +45,8 @@ class EMACrossoverStrategy(BaseStrategy):
                 # Close any existing Sell positions
                 self.close_all()
                 # Place new Buy position
-                sl = close_price - (self.sl_pips * 0.1)
-                tp = close_price + (self.tp_pips * 0.1)
+                sl = close_price - (self.sl_pips * self.engine.pip_size)
+                tp = close_price + (self.tp_pips * self.engine.pip_size)
                 self.buy(self.lots, sl=sl, tp=tp)
                 
             # 9 EMA crosses BELOW 15 EMA -> SELL
@@ -54,6 +54,6 @@ class EMACrossoverStrategy(BaseStrategy):
                 # Close any existing Buy positions
                 self.close_all()
                 # Place new Sell position
-                sl = close_price + (self.sl_pips * 0.1)
-                tp = close_price - (self.tp_pips * 0.1)
+                sl = close_price + (self.sl_pips * self.engine.pip_size)
+                tp = close_price - (self.tp_pips * self.engine.pip_size)
                 self.sell(self.lots, sl=sl, tp=tp)

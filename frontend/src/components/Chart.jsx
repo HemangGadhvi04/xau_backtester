@@ -1,6 +1,7 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState, useMemo } from 'react';
 import { createChart, CrosshairMode } from 'lightweight-charts';
-import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCcw, Eye, EyeOff } from 'lucide-react';
+import { getSymbolConfig } from '../utils/symbolConfig';
 
 const Chart = forwardRef(({ 
     data, 
@@ -16,14 +17,60 @@ const Chart = forwardRef(({
     isSelectingStartBar, 
     onSelectStartBar,
     onGoToLatest,
-    showSessions
+    showSessions,
+    timeframe,
+    activeSymbol,
+    chartSettings = {},
+    systematicTrades = [],
+    plannedOrder = null,
+    reviewingTrade = null,
+    smcData = null,
+    showSMC = false,
+    advancedSmcData = null,
+    showAdvancedSMC = false,
+    msbObMtfData = null,
+    showMsbObMtf = false,
+    pythonIndicators = [],
+    pythonIndicatorInstances = [],
+    onUpdatePlannedOrder = () => {}
 }, ref) => {
     const chartContainerRef = useRef(null);
     const canvasRef = useRef(null);
     const chartInstance = useRef(null);
     const candlestickSeries = useRef(null);
-    const ema9Series = useRef(null);
-    const ema15Series = useRef(null);
+    const pythonIndicatorSeries = useRef(new Map());
+    
+    const prevDataLengthRef = useRef(0);
+    const cfg = getSymbolConfig(activeSymbol);
+    const settings = {
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        showBody: true,
+        showBorders: false,
+        showWicks: true,
+        backgroundColor: '#131722',
+        gridColor: '#1f2933',
+        textColor: '#d1d4dc',
+        precisionMode: 'default',
+        ...chartSettings
+    };
+    const pricePrecision = settings.precisionMode === 'compact' ? Math.min(cfg.precision, 2) : cfg.precision;
+    const minMove = 1 / Math.pow(10, pricePrecision);
+    const candleSeriesOptions = {
+        upColor: settings.showBody ? settings.upColor : 'rgba(0, 0, 0, 0)',
+        downColor: settings.showBody ? settings.downColor : 'rgba(0, 0, 0, 0)',
+        borderVisible: settings.showBorders,
+        borderUpColor: settings.borderUpColor || settings.upColor,
+        borderDownColor: settings.borderDownColor || settings.downColor,
+        wickVisible: settings.showWicks,
+        wickUpColor: settings.wickUpColor || settings.upColor,
+        wickDownColor: settings.wickDownColor || settings.downColor,
+        priceFormat: {
+            type: 'price',
+            precision: pricePrecision,
+            minMove,
+        },
+    };
 
     const calculateEMA = (data, period) => {
         if (!data || data.length < period) return [];
@@ -45,8 +92,62 @@ const Chart = forwardRef(({
         return emaData;
     };
 
+    const calculateVWAP = (data) => {
+        if (!data || data.length === 0) return [];
+        const vwapData = [];
+        let cumVol = 0;
+        let cumVolTyp = 0;
+        let currentDay = null;
+
+        for (let i = 0; i < data.length; i++) {
+            const candle = data[i];
+            const dateObj = new Date(candle.time * 1000);
+            const dateStr = dateObj.getUTCDate();
+            
+            // Reset at new day
+            if (currentDay !== dateStr) {
+                currentDay = dateStr;
+                cumVol = 0;
+                cumVolTyp = 0;
+            }
+            const typPrice = (candle.high + candle.low + candle.close) / 3;
+            // Handle missing volume by assuming volume = 1
+            const vol = candle.volume !== undefined ? candle.volume : 1;
+
+            cumVol += vol;
+            cumVolTyp += (typPrice * vol);
+
+            vwapData.push({ time: candle.time, value: cumVolTyp / cumVol });
+        }
+        return vwapData;
+    };
+
+
     // Replay hover guides
     const [hoverBarX, setHoverBarX] = useState(null);
+
+    // Indicator & Strategy legends overlay state
+    const [hoveredValues, setHoveredValues] = useState(null);
+    const [showStrategyTrades, setShowStrategyTrades] = useState(true);
+
+    const activeValues = useMemo(() => {
+        if (hoveredValues) return hoveredValues;
+        if (!data || data.length === 0) return null;
+        
+        const lastCandle = data[data.length - 1];
+        const ema9Data = calculateEMA(data, 9);
+        const ema15Data = calculateEMA(data, 15);
+        
+        return {
+            time: lastCandle.time,
+            open: lastCandle.open,
+            high: lastCandle.high,
+            low: lastCandle.low,
+            close: lastCandle.close,
+            ema9: ema9Data.length > 0 ? ema9Data[ema9Data.length - 1]?.value : null,
+            ema15: ema15Data.length > 0 ? ema15Data[ema15Data.length - 1]?.value : null
+        };
+    }, [hoveredValues, data]);
 
     // Drawing interaction states
     const [drawingState, setDrawingState] = useState({
@@ -58,6 +159,8 @@ const Chart = forwardRef(({
     const [selectedId, setSelectedId] = useState(null);
     const [hoverState, setHoverState] = useState(null); // { type: 'line'|'p1'|'p2'|'sl'|'tp'|'limit'|'pendingSl'|'pendingTp', drawingId|positionId|pendingOrderId }
     const [dragState, setDragState] = useState(null); 
+    const [localDraggedDrawing, setLocalDraggedDrawing] = useState(null); 
+    const [interactionCursor, setInteractionCursor] = useState('default');
 
     const sessionsCache = useMemo(() => {
         if (!data || data.length === 0) return [];
@@ -142,19 +245,36 @@ const Chart = forwardRef(({
         }
         return { time, price };
     };
-
     // Helper: Convert chart data values to pixel coordinates
     const getPixelCoords = (time, price) => {
         if (!chartInstance.current || !candlestickSeries.current) return null;
+        return getPointCoords({ time, price });
+    };
+
+    // Helper: Safely resolve time to X coordinate (handles missing times from setData rebuilds)
+    const getPointCoords = (pt) => {
+        if (!pt) return null;
+        let { time, price } = pt;
         if (time === undefined || time === null || price === undefined || price === null || isNaN(price)) return null;
         const y = candlestickSeries.current.priceToCoordinate(price);
         let x = chartInstance.current.timeScale().timeToCoordinate(time);
         
         if (x === null && time !== null) {
             const metrics = getSpacingAndLastBar();
-            if (metrics && time > metrics.lastTime) {
-                const futureBars = (time - metrics.lastTime) / metrics.timeframeSeconds;
-                x = metrics.lastX + futureBars * metrics.spacing;
+            if (metrics && data && data.length > 0) {
+                if (time > metrics.lastTime) {
+                    // Future bars
+                    const futureBars = (time - metrics.lastTime) / metrics.timeframeSeconds;
+                    x = metrics.lastX + futureBars * metrics.spacing;
+                } else {
+                    // Past/Interpolated bars: find closest candle
+                    const closestCandle = data.reduce((prev, curr) => Math.abs(curr.time - time) < Math.abs(prev.time - time) ? curr : prev);
+                    const closestX = chartInstance.current.timeScale().timeToCoordinate(closestCandle.time);
+                    if (closestX !== null) {
+                        const offsetBars = (time - closestCandle.time) / metrics.timeframeSeconds;
+                        x = closestX + offsetBars * metrics.spacing;
+                    }
+                }
             }
         }
         if (x === null || y === null) return null;
@@ -215,6 +335,31 @@ const Chart = forwardRef(({
                         return { type: 'pendingTp', pendingOrderId: order.id };
                     }
                 }
+            }
+        }
+
+        // 2b. Check Planned Order Preview levels
+        if (plannedOrder && data && data.length > 0) {
+            const cfg = getSymbolConfig(activeSymbol);
+            const currentPrice = data[data.length - 1].close;
+            const entryPrice = plannedOrder.limitPrice || currentPrice;
+            const isBuy = plannedOrder.direction === 'BUY';
+            const slPrice = isBuy ? (entryPrice - plannedOrder.slPips * cfg.pipSize) : (entryPrice + plannedOrder.slPips * cfg.pipSize);
+            const tpPrice = isBuy ? (entryPrice + plannedOrder.tpPips * cfg.pipSize) : (entryPrice - plannedOrder.tpPips * cfg.pipSize);
+
+            const entryY = candlestickSeries.current.priceToCoordinate(entryPrice);
+            if (entryY !== null && Math.abs(y - entryY) < 6) {
+                return { type: 'plannedEntry', price: entryPrice };
+            }
+
+            const slY = candlestickSeries.current.priceToCoordinate(slPrice);
+            if (slY !== null && Math.abs(y - slY) < 6) {
+                return { type: 'plannedSl', price: slPrice };
+            }
+
+            const tpY = candlestickSeries.current.priceToCoordinate(tpPrice);
+            if (tpY !== null && Math.abs(y - tpY) < 6) {
+                return { type: 'plannedTp', price: tpPrice };
             }
         }
 
@@ -298,11 +443,22 @@ const Chart = forwardRef(({
                             return { drawingId: d.id, type: 'line' };
                         }
                     } else if (d.type === 'rectangle' || d.type === 'risk_reward' || d.type === 'volume_profile') {
-                        const minX = Math.min(pt1.x, pt2.x);
-                        const maxX = Math.max(pt1.x, pt2.x);
-                        const minY = Math.min(pt1.y, pt2.y);
-                        const maxY = Math.max(pt1.y, pt2.y);
+                        let minX = Math.min(pt1.x, pt2.x);
+                        let maxX = Math.max(pt1.x, pt2.x);
+                        let minY = Math.min(pt1.y, pt2.y);
+                        let maxY = Math.max(pt1.y, pt2.y);
                         
+                        if (d.type === 'risk_reward') {
+                            const slPrice = d.p2.price;
+                            const isLong = (d.style && d.style.isLong !== undefined) ? d.style.isLong : (d.p2.price < d.p1.price);
+                            const tpPrice = d.p3 && d.p3.price !== undefined ? d.p3.price : (isLong ? d.p1.price + Math.abs(d.p1.price - slPrice) * 2 : d.p1.price - Math.abs(d.p1.price - slPrice) * 2);
+                            const tpPt = getPixelCoords(d.p3 && d.p3.time !== undefined ? d.p3.time : d.p1.time, tpPrice);
+                            if (tpPt) {
+                                minY = Math.min(minY, tpPt.y);
+                                maxY = Math.max(maxY, tpPt.y);
+                            }
+                        }
+
                         const nearLeft = Math.abs(x - minX) < 6 && y >= minY && y <= maxY;
                         const nearRight = Math.abs(x - maxX) < 6 && y >= minY && y <= maxY;
                         const nearTop = Math.abs(y - minY) < 6 && x >= minX && x <= maxX;
@@ -310,6 +466,10 @@ const Chart = forwardRef(({
                         
                         if (nearLeft || nearRight || nearTop || nearBottom) {
                             return { drawingId: d.id, type: 'line' };
+                        }
+                        
+                        if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+                            return { drawingId: d.id, type: 'area' };
                         }
                     }
                 }
@@ -363,6 +523,259 @@ const Chart = forwardRef(({
             });
         }
 
+        // Draw MTF SMC Zones (Order Blocks and FVGs)
+        if (showSMC && smcData && chartInstance.current) {
+            const timeScale = chartInstance.current.timeScale();
+            const priceScale = candlestickSeries.current;
+
+            const drawSMCZone = (zone, zoneType, tfLabel) => {
+                if (!zone || !zone.is_active) return; // Only draw active (unmitigated) zones
+                
+                // We draw the zone starting from its creation time, extending off to the right edge of the chart (since it's unmitigated)
+                const xStart = timeScale.timeToCoordinate(zone.time);
+                if (xStart === null) return;
+                
+                const yTop = priceScale.priceToCoordinate(zone.top);
+                const yBottom = priceScale.priceToCoordinate(zone.bottom);
+                const yCE = priceScale.priceToCoordinate(zone.ce);
+                
+                if (yTop === null || yBottom === null) return;
+                
+                const height = Math.abs(yBottom - yTop);
+                const startY = Math.min(yTop, yBottom);
+                
+                // Determine colors based on zoneType (bullish = green tint, bearish = red tint)
+                let bgColor = zone.type === 'bullish' ? 'rgba(38, 166, 154, 0.15)' : 'rgba(239, 83, 80, 0.15)';
+                let borderColor = zone.type === 'bullish' ? 'rgba(38, 166, 154, 0.8)' : 'rgba(239, 83, 80, 0.8)';
+                
+                // Differentiate FVG vs OB visually (OB can be slightly more opaque or have dashed borders)
+                if (zoneType === 'OB') {
+                    bgColor = zone.type === 'bullish' ? 'rgba(38, 166, 154, 0.25)' : 'rgba(239, 83, 80, 0.25)';
+                }
+                
+                // Draw shaded box to the right edge
+                ctx.fillStyle = bgColor;
+                ctx.fillRect(xStart, startY, canvas.width - xStart, height);
+                
+                // Draw top/bottom borders
+                ctx.beginPath();
+                ctx.moveTo(xStart, yTop);
+                ctx.lineTo(canvas.width, yTop);
+                ctx.moveTo(xStart, yBottom);
+                ctx.lineTo(canvas.width, yBottom);
+                ctx.strokeStyle = borderColor;
+                if (zoneType === 'OB') {
+                    ctx.setLineDash([4, 4]); // Dashed for OB
+                } else {
+                    ctx.setLineDash([]); // Solid for FVG
+                }
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                // Draw CE (50% midpoint) line lightly
+                if (yCE !== null) {
+                    ctx.beginPath();
+                    ctx.moveTo(xStart, yCE);
+                    ctx.lineTo(canvas.width, yCE);
+                    ctx.strokeStyle = zone.type === 'bullish' ? 'rgba(38, 166, 154, 0.4)' : 'rgba(239, 83, 80, 0.4)';
+                    ctx.setLineDash([2, 4]);
+                    ctx.stroke();
+                }
+                ctx.setLineDash([]); // Reset dash
+                
+                // Draw Label
+                ctx.fillStyle = borderColor;
+                ctx.font = '10px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(`${tfLabel} ${zone.type === 'bullish' ? '+B' : '-B'} ${zoneType}`, xStart + 4, startY - 2);
+            };
+
+            // Iterate through the MTF hierarchies (HTF first so LTF draws over top)
+            if (smcData.htf_4h) {
+                if (smcData.htf_4h.obs) smcData.htf_4h.obs.forEach(ob => drawSMCZone(ob, 'OB', '4H'));
+                if (smcData.htf_4h.fvgs) smcData.htf_4h.fvgs.forEach(fvg => drawSMCZone(fvg, 'FVG', '4H'));
+            }
+            if (smcData.htf_1h) {
+                if (smcData.htf_1h.obs) smcData.htf_1h.obs.forEach(ob => drawSMCZone(ob, 'OB', '1H'));
+                if (smcData.htf_1h.fvgs) smcData.htf_1h.fvgs.forEach(fvg => drawSMCZone(fvg, 'FVG', '1H'));
+            }
+            if (smcData.base) {
+                if (smcData.base.obs) smcData.base.obs.forEach(ob => drawSMCZone(ob, 'OB', timeframe));
+                if (smcData.base.fvgs) smcData.base.fvgs.forEach(fvg => drawSMCZone(fvg, 'FVG', timeframe));
+            }
+        }
+
+        // Draw MSB-OB structure, zigzag, and active order blocks.
+        if (showMsbObMtf && msbObMtfData && chartInstance.current) {
+            const timeScale = chartInstance.current.timeScale();
+            const priceScale = candlestickSeries.current;
+            const visibleUntil = data?.[data.length - 1]?.time ?? Infinity;
+            const swings = [...(msbObMtfData.swings || [])].filter(item => item.time <= visibleUntil).sort((a, b) => a.time - b.time);
+
+            ctx.beginPath();
+            let started = false;
+            swings.forEach(swing => {
+                const x = timeScale.timeToCoordinate(swing.time);
+                const y = priceScale.priceToCoordinate(swing.price);
+                if (x === null || y === null) return;
+                if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+            });
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.55)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([]);
+            ctx.stroke();
+
+            (msbObMtfData.zones || []).filter(zone => zone.active && zone.created_at <= visibleUntil).forEach(zone => {
+                const x = timeScale.timeToCoordinate(zone.time);
+                const yTop = priceScale.priceToCoordinate(zone.top);
+                const yBottom = priceScale.priceToCoordinate(zone.bottom);
+                if (x === null || yTop === null || yBottom === null) return;
+                const bullish = zone.direction === 'bullish';
+                const top = Math.min(yTop, yBottom);
+                const height = Math.abs(yBottom - yTop);
+                ctx.fillStyle = bullish ? 'rgba(34, 197, 94, 0.20)' : 'rgba(239, 68, 68, 0.20)';
+                ctx.strokeStyle = bullish ? '#22c55e' : '#ef4444';
+                ctx.fillRect(x, top, canvas.width - x, height);
+                ctx.strokeRect(x, top, canvas.width - x, height);
+                ctx.fillStyle = bullish ? '#4ade80' : '#f87171';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.fillText(`${bullish ? 'Bu' : 'Be'}-${zone.type}`, x + 4, top + 12);
+            });
+
+            (msbObMtfData.events || []).filter(event => event.time <= visibleUntil).forEach(event => {
+                const x = timeScale.timeToCoordinate(event.time);
+                const y = priceScale.priceToCoordinate(event.price);
+                if (x === null || y === null) return;
+                const bullish = event.direction === 'bullish';
+                ctx.beginPath();
+                ctx.moveTo(Math.max(0, x - 45), y);
+                ctx.lineTo(x, y);
+                ctx.strokeStyle = bullish ? '#22c55e' : '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = bullish ? '#4ade80' : '#f87171';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.fillText('MSB', Math.max(2, x - 42), y - 4);
+            });
+        }
+
+        // Generic overlays emitted by registered Python indicators.
+        if (chartInstance.current && pythonIndicators.length) {
+            const timeScale = chartInstance.current.timeScale();
+            const priceScale = candlestickSeries.current;
+            pythonIndicators.forEach(instanceResult => {
+                const instance = pythonIndicatorInstances.find(item => item.instance_id === instanceResult.instance_id);
+                if (instance?.visible === false) return;
+                const result = instanceResult.result || {};
+                (result.zones || []).filter(zone => zone.active !== false).forEach(zone => {
+                    const x = timeScale.timeToCoordinate(zone.time ?? zone.created_at);
+                    const yTop = priceScale.priceToCoordinate(zone.top);
+                    const yBottom = priceScale.priceToCoordinate(zone.bottom);
+                    if (x === null || yTop === null || yBottom === null) return;
+                    const bullish = ['bullish', 'buy'].includes(String(zone.direction).toLowerCase());
+                    const color = bullish ? '#22c55e' : '#ef4444';
+                    const top = Math.min(yTop, yBottom);
+                    ctx.fillStyle = bullish ? 'rgba(34,197,94,.16)' : 'rgba(239,68,68,.16)';
+                    ctx.strokeStyle = color;
+                    ctx.fillRect(x, top, canvas.width - x, Math.abs(yBottom - yTop));
+                    ctx.strokeRect(x, top, canvas.width - x, Math.abs(yBottom - yTop));
+                    ctx.fillStyle = color;
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.fillText(`${zone.timeframe ? `${zone.timeframe} ` : ''}${zone.type || 'Zone'}`, x + 4, top + 12);
+                });
+                (result.lines || []).forEach(line => {
+                    if (line.type === 'zigzag') {
+                        ctx.beginPath();
+                        let started = false;
+                        (line.points || []).forEach(point => {
+                            const x = timeScale.timeToCoordinate(point.time);
+                            const y = priceScale.priceToCoordinate(point.price);
+                            if (x === null || y === null) return;
+                            if (started) ctx.lineTo(x, y); else { ctx.moveTo(x, y); started = true; }
+                        });
+                        ctx.strokeStyle = 'rgba(148,163,184,.65)'; ctx.lineWidth = 1; ctx.stroke();
+                    } else if (line.type === 'horizontal_ray') {
+                        const x = timeScale.timeToCoordinate(line.time);
+                        const y = priceScale.priceToCoordinate(line.price);
+                        if (x === null || y === null) return;
+                        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(canvas.width, y);
+                        ctx.strokeStyle = '#9c27b0'; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+                        ctx.fillStyle = '#ce93d8'; ctx.font = '10px sans-serif'; ctx.fillText(line.label || '', x + 4, y - 3);
+                    }
+                });
+                (result.markers || []).forEach(marker => {
+                    const x = timeScale.timeToCoordinate(marker.time);
+                    const y = priceScale.priceToCoordinate(marker.price);
+                    if (x === null || y === null) return;
+                    ctx.fillStyle = marker.direction === 'bullish' ? '#4ade80' : '#f87171';
+                    ctx.font = 'bold 10px sans-serif'; ctx.fillText(marker.label || 'Signal', x + 3, y - 5);
+                });
+            });
+        }
+
+        // Draw Advanced SMC Zones (QML, RBS, SBS, TJL)
+        if (showAdvancedSMC && Array.isArray(advancedSmcData) && chartInstance.current) {
+            const timeScale = chartInstance.current.timeScale();
+            const priceScale = candlestickSeries.current;
+
+            advancedSmcData.forEach(zone => {
+                if (!zone || !zone.active) return; // Only draw active, untouched zones
+                
+                const xStart = timeScale.timeToCoordinate(zone.created_at);
+                if (xStart === null) return;
+                
+                const yTop = priceScale.priceToCoordinate(zone.top);
+                const yBottom = priceScale.priceToCoordinate(zone.bottom);
+                
+                if (yTop === null || yBottom === null) return;
+                
+                const height = Math.abs(yBottom - yTop);
+                const startY = Math.min(yTop, yBottom);
+                
+                // Color palette for Advanced Zones
+                let bgColor = zone.direction === 'BUY' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)';
+                let borderColor = zone.direction === 'BUY' ? 'rgba(76, 175, 80, 0.9)' : 'rgba(244, 67, 54, 0.9)';
+                
+                // Special styling for QML zones (gold tint)
+                if (zone.type === 'QML') {
+                    bgColor = zone.direction === 'BUY' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(255, 152, 0, 0.2)';
+                    borderColor = zone.direction === 'BUY' ? 'rgba(255, 193, 7, 0.9)' : 'rgba(255, 152, 0, 0.9)';
+                } else if (zone.type && zone.type.startsWith('TJL2')) {
+                    // TJL2 A+ Zones (blue tint)
+                    bgColor = zone.direction === 'BUY' ? 'rgba(33, 150, 243, 0.2)' : 'rgba(156, 39, 176, 0.2)';
+                    borderColor = zone.direction === 'BUY' ? 'rgba(33, 150, 243, 0.9)' : 'rgba(156, 39, 176, 0.9)';
+                } else if (zone.type && zone.type.startsWith('TJL1')) {
+                    // TJL1 Lower probability (grey/transparent)
+                    bgColor = 'rgba(158, 158, 158, 0.1)';
+                    borderColor = 'rgba(158, 158, 158, 0.6)';
+                }
+
+                // Draw shaded box to the right edge
+                ctx.fillStyle = bgColor;
+                ctx.fillRect(xStart, startY, canvas.width - xStart, height);
+                
+                // Draw top/bottom borders
+                ctx.beginPath();
+                ctx.moveTo(xStart, yTop);
+                ctx.lineTo(canvas.width, yTop);
+                ctx.moveTo(xStart, yBottom);
+                ctx.lineTo(canvas.width, yBottom);
+                ctx.strokeStyle = borderColor;
+                ctx.setLineDash([2, 2]); // Dotted to distinguish from classic SMC
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Draw Label
+                ctx.fillStyle = borderColor;
+                ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(`[${zone.type}] ${zone.direction}`, xStart + 4, startY - 2);
+            });
+        }
+
         // Draw pending limit orders
         if (pendingOrders && pendingOrders.length > 0 && candlestickSeries.current) {
             pendingOrders.forEach(order => {
@@ -378,7 +791,7 @@ const Chart = forwardRef(({
                     ctx.setLineDash([]);
                     ctx.fillStyle = '#f59e0b';
                     ctx.font = '10px sans-serif';
-                    ctx.fillText(`Limit Order (Drag): ${order.entryPrice.toFixed(2)}`, 10, entryY - 4);
+                    ctx.fillText(`Limit Order (Drag): ${order.entryPrice.toFixed(cfg.precision)}`, 10, entryY - 4);
                 }
 
                 if (order.sl) {
@@ -393,7 +806,7 @@ const Chart = forwardRef(({
                         ctx.stroke();
                         ctx.setLineDash([]);
                         ctx.fillStyle = 'rgba(239, 83, 80, 0.8)';
-                        ctx.fillText(`Limit SL (Drag): ${order.sl.toFixed(2)}`, 10, slY - 4);
+                        ctx.fillText(`Limit SL (Drag): ${order.sl.toFixed(cfg.precision)}`, 10, slY - 4);
                     }
                 }
 
@@ -409,41 +822,41 @@ const Chart = forwardRef(({
                         ctx.stroke();
                         ctx.setLineDash([]);
                         ctx.fillStyle = 'rgba(38, 166, 154, 0.8)';
-                        ctx.fillText(`Limit TP (Drag): ${order.tp.toFixed(2)}`, 10, tpY - 4);
+                        ctx.fillText(`Limit TP (Drag): ${order.tp.toFixed(cfg.precision)}`, 10, tpY - 4);
                     }
                 }
             });
         }
 
+        const drawBadge = (text, y, bgColor, textColor) => {
+            ctx.font = 'bold 10px sans-serif';
+            const textWidth = ctx.measureText(text).width;
+            const paddingX = 8;
+            const paddingY = 4;
+            const badgeWidth = textWidth + paddingX * 2;
+            const badgeHeight = 14 + paddingY * 2;
+            const badgeX = canvas.width / 2 - badgeWidth / 2;
+            const badgeY = y - badgeHeight / 2;
+
+            ctx.fillStyle = bgColor;
+            if (ctx.roundRect) {
+                ctx.beginPath();
+                ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 4);
+                ctx.fill();
+            } else {
+                ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
+            }
+
+            ctx.fillStyle = textColor;
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, canvas.width / 2, y);
+            ctx.textAlign = 'left';
+        };
+
         // Draw active positions SL/TP levels
         if (positions && positions.length > 0 && candlestickSeries.current) {
             const currentPrice = data && data.length > 0 ? data[data.length - 1].close : 0;
-
-            const drawBadge = (text, y, bgColor, textColor) => {
-                ctx.font = 'bold 10px sans-serif';
-                const textWidth = ctx.measureText(text).width;
-                const paddingX = 8;
-                const paddingY = 4;
-                const badgeWidth = textWidth + paddingX * 2;
-                const badgeHeight = 14 + paddingY * 2;
-                const badgeX = canvas.width / 2 - badgeWidth / 2;
-                const badgeY = y - badgeHeight / 2;
-
-                ctx.fillStyle = bgColor;
-                if (ctx.roundRect) {
-                    ctx.beginPath();
-                    ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 4);
-                    ctx.fill();
-                } else {
-                    ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
-                }
-
-                ctx.fillStyle = textColor;
-                ctx.textBaseline = 'middle';
-                ctx.textAlign = 'center';
-                ctx.fillText(text, canvas.width / 2, y);
-                ctx.textAlign = 'left'; // Reset to default
-            };
 
             positions.forEach(pos => {
                 const isBuy = pos.type === 'BUY';
@@ -458,7 +871,7 @@ const Chart = forwardRef(({
                     ctx.stroke();
                     ctx.setLineDash([]);
                     
-                    const pnl = (isBuy ? (currentPrice - pos.entryPrice) : (pos.entryPrice - currentPrice)) * pos.lots * 100;
+                    const pnl = (isBuy ? (currentPrice - pos.entryPrice) : (pos.entryPrice - currentPrice)) * pos.lots * cfg.contractSize;
                     const pnlText = `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USD`;
                     const badgeText = `${isBuy ? '' : '-'}${pos.lots.toFixed(2)} | ${pnlText}`;
                     drawBadge(badgeText, entryY, pnl >= 0 ? '#26a69a' : '#ef5350', '#ffffff');
@@ -476,7 +889,7 @@ const Chart = forwardRef(({
                         ctx.stroke();
                         ctx.setLineDash([]);
 
-                        const slPnl = (isBuy ? (pos.sl - pos.entryPrice) : (pos.entryPrice - pos.sl)) * pos.lots * 100;
+                        const slPnl = (isBuy ? (pos.sl - pos.entryPrice) : (pos.entryPrice - pos.sl)) * pos.lots * cfg.contractSize;
                         const badgeText = `${pos.lots.toFixed(2)} | ${slPnl >= 0 ? '+' : ''}${slPnl.toFixed(2)} USD`;
                         drawBadge(badgeText, slY, '#f59e0b', '#ffffff');
                     }
@@ -494,7 +907,7 @@ const Chart = forwardRef(({
                         ctx.stroke();
                         ctx.setLineDash([]);
 
-                        const tpPnl = (isBuy ? (pos.tp - pos.entryPrice) : (pos.entryPrice - pos.tp)) * pos.lots * 100;
+                        const tpPnl = (isBuy ? (pos.tp - pos.entryPrice) : (pos.entryPrice - pos.tp)) * pos.lots * cfg.contractSize;
                         const badgeText = `${pos.lots.toFixed(2)} | ${tpPnl >= 0 ? '+' : ''}${tpPnl.toFixed(2)} USD`;
                         drawBadge(badgeText, tpY, '#26a69a', '#ffffff');
                     }
@@ -502,11 +915,164 @@ const Chart = forwardRef(({
             });
         }
 
+        // Draw Reviewing Trade levels (Historical Trade Review)
+        if (reviewingTrade && candlestickSeries.current) {
+            const entryY = candlestickSeries.current.priceToCoordinate(reviewingTrade.entryPrice);
+            if (entryY !== null) {
+                ctx.beginPath();
+                ctx.setLineDash([4, 4]);
+                ctx.moveTo(0, entryY);
+                ctx.lineTo(canvas.width, entryY);
+                ctx.strokeStyle = '#9c27b0'; 
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.setLineDash([]);
+                drawBadge(`Review Entry: ${reviewingTrade.entryPrice.toFixed(cfg.precision)}`, entryY, '#9c27b0', '#ffffff');
+            }
+
+            if (reviewingTrade.sl) {
+                const slY = candlestickSeries.current.priceToCoordinate(reviewingTrade.sl);
+                if (slY !== null) {
+                    ctx.beginPath();
+                    ctx.setLineDash([2, 2]);
+                    ctx.moveTo(0, slY);
+                    ctx.lineTo(canvas.width, slY);
+                    ctx.strokeStyle = '#ef5350';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    drawBadge(`Review SL: ${reviewingTrade.sl.toFixed(cfg.precision)}`, slY, '#ef5350', '#ffffff');
+                }
+            }
+
+            if (reviewingTrade.tp) {
+                const tpY = candlestickSeries.current.priceToCoordinate(reviewingTrade.tp);
+                if (tpY !== null) {
+                    ctx.beginPath();
+                    ctx.setLineDash([2, 2]);
+                    ctx.moveTo(0, tpY);
+                    ctx.lineTo(canvas.width, tpY);
+                    ctx.strokeStyle = '#26a69a';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    drawBadge(`Review TP: ${reviewingTrade.tp.toFixed(cfg.precision)}`, tpY, '#26a69a', '#ffffff');
+                }
+            }
+            
+            if (reviewingTrade.closePrice) {
+                const closeY = candlestickSeries.current.priceToCoordinate(reviewingTrade.closePrice);
+                if (closeY !== null) {
+                    ctx.beginPath();
+                    ctx.setLineDash([2, 2]);
+                    ctx.moveTo(0, closeY);
+                    ctx.lineTo(canvas.width, closeY);
+                    ctx.strokeStyle = '#f59e0b';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    drawBadge(`Review Exit (${reviewingTrade.pnl > 0 ? 'Win' : 'Loss'}): ${reviewingTrade.closePrice.toFixed(cfg.precision)}`, closeY, '#f59e0b', '#ffffff');
+                }
+            }
+        }
+
+        // Draw Planned Order levels (Pre-trade preview)
+        if (plannedOrder && candlestickSeries.current && data && data.length > 0) {
+            const cfg = getSymbolConfig(activeSymbol);
+            const currentPrice = data[data.length - 1].close;
+            const entryPrice = plannedOrder.limitPrice || currentPrice;
+            const lots = plannedOrder.lots || 0.01;
+            const isBuy = plannedOrder.direction === 'BUY';
+            
+            // Calculate SL and TP prices
+            const slPrice = isBuy ? (entryPrice - plannedOrder.slPips * cfg.pipSize) : (entryPrice + plannedOrder.slPips * cfg.pipSize);
+            const tpPrice = isBuy ? (entryPrice + plannedOrder.tpPips * cfg.pipSize) : (entryPrice - plannedOrder.tpPips * cfg.pipSize);
+
+            // Compute coordinates
+            const entryY = candlestickSeries.current.priceToCoordinate(entryPrice);
+            const slY = candlestickSeries.current.priceToCoordinate(slPrice);
+            const tpY = candlestickSeries.current.priceToCoordinate(tpPrice);
+
+            const drawPlannedBadge = (text, y, bgColor, textColor) => {
+                ctx.font = 'bold 10px sans-serif';
+                const textWidth = ctx.measureText(text).width;
+                const paddingX = 8;
+                const paddingY = 4;
+                const badgeWidth = textWidth + paddingX * 2;
+                const badgeHeight = 14 + paddingY * 2;
+                const badgeX = canvas.width / 4 - badgeWidth / 2;
+                const badgeY = y - badgeHeight / 2;
+
+                ctx.fillStyle = bgColor;
+                if (ctx.roundRect) {
+                    ctx.beginPath();
+                    ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 4);
+                    ctx.fill();
+                } else {
+                    ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
+                }
+
+                ctx.fillStyle = textColor;
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = 'center';
+                ctx.fillText(text, canvas.width / 4, y);
+                ctx.textAlign = 'left';
+            };
+
+            // 1. Draw Planned Entry Line
+            if (entryY !== null) {
+                ctx.beginPath();
+                ctx.setLineDash([6, 3]);
+                ctx.moveTo(0, entryY);
+                ctx.lineTo(canvas.width, entryY);
+                ctx.strokeStyle = '#ffd700'; // gold color for planned entry
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                const label = `${plannedOrder.orderType === 'LIMIT' ? 'Limit ' : ''}Entry (Drag): ${entryPrice.toFixed(cfg.precision)} (${lots.toFixed(2)} Lots)`;
+                drawPlannedBadge(label, entryY, 'rgba(255, 215, 0, 0.2)', '#ffd700');
+            }
+
+            // 2. Draw Planned SL Line
+            if (slY !== null) {
+                ctx.beginPath();
+                ctx.setLineDash([4, 4]);
+                ctx.moveTo(0, slY);
+                ctx.lineTo(canvas.width, slY);
+                ctx.strokeStyle = '#ff9800'; // orange for SL
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                const slUSD = plannedOrder.slPips * cfg.pipSize * cfg.contractSize * lots;
+                const label = `SL (Drag): ${slPrice.toFixed(cfg.precision)} (-$${slUSD.toFixed(2)})`;
+                drawPlannedBadge(label, slY, 'rgba(239, 83, 80, 0.2)', '#ef5350');
+            }
+
+            // 3. Draw Planned TP Line
+            if (tpY !== null) {
+                ctx.beginPath();
+                ctx.setLineDash([4, 4]);
+                ctx.moveTo(0, tpY);
+                ctx.lineTo(canvas.width, tpY);
+                ctx.strokeStyle = '#4caf50'; // green for TP
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                const tpUSD = plannedOrder.tpPips * cfg.pipSize * cfg.contractSize * lots;
+                const label = `TP (Drag): ${tpPrice.toFixed(cfg.precision)} (+$${tpUSD.toFixed(2)})`;
+                drawPlannedBadge(label, tpY, 'rgba(38, 166, 154, 0.2)', '#26a69a');
+            }
+        }
+
         // Draw finalized drawings
         if (drawings) {
             drawings.forEach(d => {
                 const isSelected = selectedId === d.id;
-                drawShape(ctx, d, isSelected);
+                const shapeToDraw = (localDraggedDrawing && localDraggedDrawing.id === d.id) ? localDraggedDrawing : d;
+                drawShape(ctx, shapeToDraw, isSelected);
             });
         }
 
@@ -702,9 +1268,35 @@ const Chart = forwardRef(({
             ctx.fill();
             ctx.strokeStyle = isSelected ? '#ffffff' : baseColor;
             ctx.stroke();
+
+            // Draw Zone Template & Timeframe Label if specified
+            const zoneText = style.zoneTemplate ? style.zoneTemplate.toUpperCase() : '';
+            const tfText = style.timeframe ? style.timeframe.toUpperCase() : '';
+            const labelText = [tfText, zoneText].filter(Boolean).join(' ');
+
+            if (labelText) {
+                ctx.fillStyle = isSelected ? '#ffffff' : baseColor;
+                ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                // Put it slightly inside the top-left of the rectangle
+                const labelX = Math.min(pt1.x, pt2.x) + 6;
+                const labelY = Math.min(pt1.y, pt2.y) + 4;
+                ctx.fillText(labelText, labelX, labelY);
+            }
         } else if (type === 'fib') {
-            const priceDiff = pt2.y - pt1.y;
-            const priceValDiff = p2.price - p1.price;
+            const priceDiff = pt1.y - pt2.y;
+            const priceValDiff = p1.price - p2.price;
+            
+            ctx.beginPath();
+            ctx.setLineDash([4, 4]);
+            ctx.moveTo(pt1.x, pt1.y);
+            ctx.lineTo(pt2.x, pt2.y);
+            ctx.strokeStyle = style.color || '#787b86';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
             const fibLevels = style.fibLevels || [
                 { lvl: 0, color: '#787b86', enabled: true },
                 { lvl: 0.236, color: '#f44336', enabled: false },
@@ -716,12 +1308,27 @@ const Chart = forwardRef(({
                 { lvl: 0.89, color: '#ff1744', enabled: true },
                 { lvl: 1.0, color: '#787b86', enabled: true }
             ];
+
+            const enabledLevels = fibLevels.filter(item => item.enabled !== false).sort((a, b) => a.lvl - b.lvl);
+
+            // Draw shaded background zones between consecutive Fibonacci levels
+            if (opacity > 0 && enabledLevels.length > 1) {
+                for (let j = 0; j < enabledLevels.length - 1; j++) {
+                    const lA = enabledLevels[j];
+                    const lB = enabledLevels[j + 1];
+                    const yA = pt2.y + priceDiff * lA.lvl;
+                    const yB = pt2.y + priceDiff * lB.lvl;
+                    
+                    ctx.fillStyle = hexToRgba(lA.color || style.color || '#3b82f6', opacity);
+                    ctx.fillRect(Math.min(pt1.x, pt2.x), Math.min(yA, yB), Math.abs(pt2.x - pt1.x), Math.abs(yB - yA));
+                }
+            }
             
             fibLevels.forEach(item => {
                 if (item.enabled === false) return;
                 const lvl = item.lvl;
-                const y = pt1.y + priceDiff * lvl;
-                const lvlPrice = p1.price + priceValDiff * lvl;
+                const y = pt2.y + priceDiff * lvl;
+                const lvlPrice = p2.price + priceValDiff * lvl;
                 
                 ctx.beginPath();
                 ctx.moveTo(Math.min(pt1.x, pt2.x), y);
@@ -734,7 +1341,7 @@ const Chart = forwardRef(({
 
                 ctx.fillStyle = isSelected ? '#ffffff' : drawColor;
                 ctx.font = '10px sans-serif';
-                ctx.fillText(`${(lvl * 100).toFixed(1)}% (${lvlPrice.toFixed(2)})`, Math.min(pt1.x, pt2.x) + 5, y - 4);
+                ctx.fillText(`${lvl} (${lvlPrice.toFixed(cfg.precision)})`, Math.min(pt1.x, pt2.x) + 5, y - 4);
             });
         } else if (type === 'scale') {
             const priceDiffVal = p2.price - p1.price;
@@ -814,7 +1421,7 @@ const Chart = forwardRef(({
                 }
             }
             
-            const textLine1 = `${isUp ? '+' : ''}${priceDiffVal.toFixed(2)} USD (${isUp ? '+' : ''}${percent}%)`;
+            const textLine1 = `${isUp ? '+' : ''}${priceDiffVal.toFixed(cfg.precision)} USD (${isUp ? '+' : ''}${percent}%)`;
             const textLine2 = `${isUp ? '+' : ''}${pips} Pips | ${barCount} bars (${timeText})`;
             
             ctx.fillStyle = 'rgba(30, 34, 45, 0.9)';
@@ -844,49 +1451,164 @@ const Chart = forwardRef(({
             const slPt = getPixelCoords(p2.time, slPrice);
             const tpPt = getPixelCoords(p3 && p3.time !== undefined ? p3.time : p1.time, tpPrice);
 
-            if (slPt && tpPt) {
+            // Get current point for tracking line
+            let currentPt = null;
+            let currentPriceForPnL = p1.price;
+            let pnlStatus = "Open";
+            
+            if (data && data.length > 0) {
+                const startIndex = data.findIndex(c => c.time >= p1.time);
+                if (startIndex !== -1) {
+                    let hitTP = false;
+                    let hitSL = false;
+                    let hitCandle = null;
+                    
+                    const maxTime = Math.min(p2.time, data[data.length - 1].time);
+                    const endIndex = data.findIndex(c => c.time > maxTime);
+                    const maxIndex = endIndex !== -1 ? endIndex : data.length;
+                    
+                    for (let i = startIndex; i < maxIndex; i++) {
+                        const c = data[i];
+                        if (isLong) {
+                            if (c.low <= slPrice) { hitSL = true; hitCandle = c; break; }
+                            if (c.high >= tpPrice) { hitTP = true; hitCandle = c; break; }
+                        } else {
+                            if (c.high >= slPrice) { hitSL = true; hitCandle = c; break; }
+                            if (c.low <= tpPrice) { hitTP = true; hitCandle = c; break; }
+                        }
+                    }
+                    
+                    if (hitTP || hitSL) {
+                        currentPt = getPixelCoords(hitCandle.time, hitTP ? tpPrice : slPrice);
+                        currentPriceForPnL = hitTP ? tpPrice : slPrice;
+                        pnlStatus = hitTP ? "Hit TP" : "Hit SL";
+                    } else {
+                        const lastValidCandle = data[maxIndex - 1];
+                        if (lastValidCandle) {
+                            currentPt = getPixelCoords(lastValidCandle.time, lastValidCandle.close);
+                            currentPriceForPnL = lastValidCandle.close;
+                            pnlStatus = (maxIndex - 1 === data.length - 1 && lastValidCandle.time <= p2.time) ? "Open" : "Closed";
+                        }
+                    }
+                }
+            }
+
+            if (slPt && tpPt && pt2) {
+                const tpColor = style.tpColor || '#089981';
+                const slColor = style.slColor || '#f23645';
+                
                 // Target Zone
                 ctx.beginPath();
                 ctx.rect(pt1.x, Math.min(pt1.y, tpPt.y), pt2.x - pt1.x, Math.abs(pt1.y - tpPt.y));
-                ctx.fillStyle = hexToRgba(style.tpColor || '#26a69a', opacity);
+                ctx.fillStyle = hexToRgba(tpColor, opacity || 0.2);
                 ctx.fill();
-                ctx.strokeStyle = isSelected ? '#ffffff' : (style.tpColor || '#26a69a');
+                ctx.strokeStyle = isSelected ? '#ffffff' : hexToRgba(tpColor, 0.4);
+                ctx.lineWidth = 1;
                 ctx.stroke();
 
                 // Stop Loss Zone
                 ctx.beginPath();
                 ctx.rect(pt1.x, Math.min(pt1.y, slPt.y), pt2.x - pt1.x, Math.abs(pt1.y - slPt.y));
-                ctx.fillStyle = hexToRgba(style.slColor || '#ef5350', opacity);
+                ctx.fillStyle = hexToRgba(slColor, opacity || 0.2);
                 ctx.fill();
-                ctx.strokeStyle = isSelected ? '#ffffff' : (style.slColor || '#ef5350');
+                ctx.strokeStyle = isSelected ? '#ffffff' : hexToRgba(slColor, 0.4);
+                ctx.stroke();
+                
+                // Entry Line (middle)
+                ctx.beginPath();
+                ctx.moveTo(pt1.x, pt1.y);
+                ctx.lineTo(pt2.x, pt1.y);
+                ctx.strokeStyle = '#787b86';
+                ctx.lineWidth = 1;
                 ctx.stroke();
 
-                // Details Text
-                ctx.fillStyle = '#ffffff';
-                ctx.font = 'bold 11px sans-serif';
-                ctx.fillText(`Target (TP): ${tpPrice.toFixed(2)}`, pt1.x + 5, Math.min(pt1.y, tpPt.y) + 14);
-                ctx.fillText(`Risk (SL): ${slPrice.toFixed(2)}`, pt1.x + 5, Math.max(pt1.y, slPt.y) - 6);
+                // Tracking Line
+                if (currentPt && currentPt.x > pt1.x && currentPt.x <= pt2.x) {
+                    ctx.beginPath();
+                    ctx.moveTo(pt1.x, pt1.y);
+                    ctx.lineTo(currentPt.x, currentPt.y);
+                    ctx.strokeStyle = '#b2b5be';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4, 4]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
 
                 // Dynamic R:R calculation
                 const riskVal = Math.abs(p1.price - slPrice);
                 const rewardVal = Math.abs(tpPrice - p1.price);
                 const targetRR = riskVal > 0 ? rewardVal / riskVal : 0;
+                
+                const currentPnL = isLong ? (currentPriceForPnL - p1.price) : (p1.price - currentPriceForPnL);
 
-                const midX = pt1.x + (pt2.x - pt1.x) / 2;
-                const midY = pt1.y;
-                ctx.fillStyle = 'rgba(30, 34, 45, 0.95)';
-                ctx.strokeStyle = '#434651';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.roundRect(midX - 55, midY - 12, 110, 24, 4);
-                ctx.fill();
-                ctx.stroke();
+                // Info Badges (Only visible on hover or select)
+                const isHovered = hoverState && hoverState.drawingId === shape.id;
+                if (isSelected || isHovered) {
+                    // Setup font for badges
+                    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
 
-                ctx.fillStyle = '#ffffff';
-                ctx.textAlign = 'center';
-                ctx.font = 'bold 11px sans-serif';
-                ctx.fillText(`R:R Ratio: ${targetRR.toFixed(2)}`, midX, midY + 4);
-                ctx.textAlign = 'left';
+                    // Top Target Text Box
+                    const targetText = `Target: ${rewardVal.toFixed(cfg.precision)} (${(rewardVal/p1.price*100).toFixed(3)}%)`;
+                    const tpMetrics = ctx.measureText(targetText);
+                    const tpx = pt1.x + (pt2.x - pt1.x)/2 - tpMetrics.width/2 - 8;
+                    const tpy = Math.min(pt1.y, tpPt.y) - 10;
+                    
+                    ctx.fillStyle = tpColor;
+                    ctx.beginPath();
+                    if (ctx.roundRect) ctx.roundRect(tpx, tpy, tpMetrics.width + 16, 20, 4);
+                    else ctx.rect(tpx, tpy, tpMetrics.width + 16, 20);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(targetText, pt1.x + (pt2.x - pt1.x)/2, tpy + 14);
+                    
+                    // Bottom Stop Text Box
+                    const stopText = `Stop: ${riskVal.toFixed(cfg.precision)} (${(riskVal/p1.price*100).toFixed(3)}%)`;
+                    const slMetrics = ctx.measureText(stopText);
+                    const slx = pt1.x + (pt2.x - pt1.x)/2 - slMetrics.width/2 - 8;
+                    const sly = Math.max(pt1.y, slPt.y) - 10;
+                    
+                    ctx.fillStyle = slColor;
+                    ctx.beginPath();
+                    if (ctx.roundRect) ctx.roundRect(slx, sly, slMetrics.width + 16, 20, 4);
+                    else ctx.rect(slx, sly, slMetrics.width + 16, 20);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(stopText, pt1.x + (pt2.x - pt1.x)/2, sly + 14);
+
+                    // Middle PnL Box
+                    const pnlLine1 = `${pnlStatus} PnL: ${currentPnL > 0 ? '+' : ''}${currentPnL.toFixed(cfg.precision)}`;
+                    const pnlLine2 = `Risk/reward ratio: ${targetRR.toFixed(2)}`;
+                    const midMetrics1 = ctx.measureText(pnlLine1);
+                    const midMetrics2 = ctx.measureText(pnlLine2);
+                    const maxMidWidth = Math.max(midMetrics1.width, midMetrics2.width);
+                    
+                    const midX = pt1.x + (pt2.x - pt1.x)/2;
+                    const midY = pt1.y;
+                    
+                    const boxX = midX - maxMidWidth/2 - 10;
+                    const boxY = midY - 18;
+                
+                    let midBg = currentPnL > 0 ? tpColor : (currentPnL < 0 ? slColor : '#787b86');
+                    
+                    ctx.fillStyle = midBg;
+                    ctx.beginPath();
+                    if (ctx.roundRect) ctx.roundRect(boxX, boxY, maxMidWidth + 20, 36, 4);
+                    else ctx.rect(boxX, boxY, maxMidWidth + 20, 36);
+                    ctx.fill();
+                    
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(pnlLine1, midX, midY - 2);
+                    ctx.fillText(pnlLine2, midX, midY + 12);
+                    
+                    ctx.textAlign = 'left';
+                }
             }
         } else if (type === 'volume_profile') {
             // Volume profile rendering
@@ -1019,7 +1741,7 @@ const Chart = forwardRef(({
 
                         ctx.fillStyle = '#ffffff';
                         ctx.font = '9px sans-serif';
-                        ctx.fillText(`VAH: ${vahPrice.toFixed(2)}`, pt1.x + 5, vahY - 3);
+                        ctx.fillText(`VAH: ${vahPrice.toFixed(cfg.precision)}`, pt1.x + 5, vahY - 3);
                     }
 
                     const valY = candlestickSeries.current.priceToCoordinate(valPrice);
@@ -1033,7 +1755,7 @@ const Chart = forwardRef(({
 
                         ctx.fillStyle = '#ffffff';
                         ctx.font = '9px sans-serif';
-                        ctx.fillText(`VAL: ${valPrice.toFixed(2)}`, pt1.x + 5, valY - 3);
+                        ctx.fillText(`VAL: ${valPrice.toFixed(cfg.precision)}`, pt1.x + 5, valY - 3);
                     }
 
                     const pocY = candlestickSeries.current.priceToCoordinate(pocPrice);
@@ -1047,7 +1769,7 @@ const Chart = forwardRef(({
 
                         ctx.fillStyle = '#ffd700';
                         ctx.font = 'bold 9px sans-serif';
-                        ctx.fillText(`POC: ${pocPrice.toFixed(2)}`, pt1.x + 5, pocY - 3);
+                        ctx.fillText(`POC: ${pocPrice.toFixed(cfg.precision)}`, pt1.x + 5, pocY - 3);
                     }
                 }
             }
@@ -1070,7 +1792,7 @@ const Chart = forwardRef(({
                 drawAnchor(ctx, pt1.x, pt1.y, isP1Hovered);
                 if (slPt) drawAnchor(ctx, pt1.x, slPt.y, isP2Hovered);
                 if (tpPt) drawAnchor(ctx, pt1.x, tpPt.y, isP3Hovered);
-                drawAnchor(ctx, pt2.x, pt1.y, isWidthHovered);
+                if (pt2) drawAnchor(ctx, pt2.x, pt1.y, isWidthHovered);
             } else {
                 const isP1Hovered = hoverState && hoverState.drawingId === shape.id && hoverState.type === 'p1';
                 const isP2Hovered = hoverState && hoverState.drawingId === shape.id && hoverState.type === 'p2';
@@ -1140,16 +1862,19 @@ const Chart = forwardRef(({
             if (drawAllRef.current) drawAllRef.current();
         };
 
+        const initialWidth = chartContainerRef.current.clientWidth || 800;
+        const initialHeight = chartContainerRef.current.clientHeight || 400;
+
         const chart = createChart(chartContainerRef.current, {
-            width: chartContainerRef.current.clientWidth,
-            height: chartContainerRef.current.clientHeight,
+            width: initialWidth,
+            height: initialHeight,
             layout: {
-                background: { color: '#131722' },
-                textColor: '#d1d4dc',
+                background: { color: settings.backgroundColor },
+                textColor: settings.textColor,
             },
             grid: {
-                vertLines: { color: '#1f2933' },
-                horzLines: { color: '#1f2933' },
+                vertLines: { color: settings.gridColor },
+                horzLines: { color: settings.gridColor },
             },
             crosshair: {
                 mode: CrosshairMode.Normal,
@@ -1167,28 +1892,10 @@ const Chart = forwardRef(({
         chartInstance.current = chart;
 
         const series = chart.addCandlestickSeries({
-            upColor: '#26a69a',
-            downColor: '#ef5350',
-            borderVisible: false,
-            wickUpColor: '#26a69a',
-            wickDownColor: '#ef5350',
+            ...candleSeriesOptions,
         });
         
         candlestickSeries.current = series;
-
-        const e9 = chart.addLineSeries({
-            color: 'rgba(255, 82, 82, 0.1)',
-            lineWidth: 1.5,
-            title: '9 EMA',
-        });
-        ema9Series.current = e9;
-
-        const e15 = chart.addLineSeries({
-            color: 'rgba(33, 150, 243, 0.1)',
-            lineWidth: 1.5,
-            title: '15 EMA',
-        });
-        ema15Series.current = e15;
 
         if (data && data.length > 0) {
             series.setData(data);
@@ -1199,6 +1906,34 @@ const Chart = forwardRef(({
             canvasRef.current.height = chartContainerRef.current.clientHeight;
         }
 
+        // Subscribe to crosshair moves to display indicators and OHLC values dynamically
+        chart.subscribeCrosshairMove((param) => {
+            if (!param || !param.time || param.point === undefined) {
+                setHoveredValues(null);
+                return;
+            }
+            
+            const dataMap = param.seriesData || param.seriesPrices;
+            if (!dataMap) return;
+
+            const priceData = dataMap.get(series);
+            const ema9Val = dataMap.get(e9);
+            const ema15Val = dataMap.get(e15);
+
+            if (priceData) {
+                setHoveredValues({
+                    time: param.time,
+                    open: priceData.open,
+                    high: priceData.high,
+                    low: priceData.low,
+                    close: priceData.close,
+                    ema9: ema9Val ? (ema9Val.value !== undefined ? ema9Val.value : ema9Val) : null,
+                    ema15: ema15Val ? (ema15Val.value !== undefined ? ema15Val.value : ema15Val) : null,
+                    vwap: dataMap.get(vwap) ? (dataMap.get(vwap).value !== undefined ? dataMap.get(vwap).value : dataMap.get(vwap)) : null
+                });
+            }
+        });
+
         const handleTimeScaleChange = () => {
             if (drawAllRef.current) drawAllRef.current();
         };
@@ -1206,9 +1941,27 @@ const Chart = forwardRef(({
         chart.timeScale().subscribeVisibleLogicalRangeChange(handleTimeScaleChange);
         chart.timeScale().subscribeVisibleTimeRangeChange(handleTimeScaleChange);
 
+        const resizeObserver = new ResizeObserver(() => {
+            handleResize();
+        });
+        
+        if (chartContainerRef.current) {
+            resizeObserver.observe(chartContainerRef.current);
+        }
+        
         window.addEventListener('resize', handleResize);
 
+        // ResizeObserver automatically handles layout changes from react-resizable-panels
+
         const handleKeyDown = (e) => {
+            // Ignore Backspace/Delete if user is editing inside an input/textarea
+            if (document.activeElement && (
+                document.activeElement.tagName === 'INPUT' || 
+                document.activeElement.tagName === 'TEXTAREA' ||
+                document.activeElement.isContentEditable
+            )) {
+                return;
+            }
             if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIdRef.current) {
                 if (onDeleteDrawingRef.current) {
                     onDeleteDrawingRef.current(selectedIdRef.current);
@@ -1245,6 +1998,7 @@ const Chart = forwardRef(({
         }
 
         return () => {
+            resizeObserver.disconnect();
             window.removeEventListener('resize', handleResize);
             window.removeEventListener('keydown', handleKeyDown);
             if (canvasEl) {
@@ -1256,7 +2010,103 @@ const Chart = forwardRef(({
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+	    }, []);
+
+    useEffect(() => {
+        if (chartInstance.current) {
+            chartInstance.current.applyOptions({
+                layout: {
+                    background: { color: settings.backgroundColor },
+                    textColor: settings.textColor,
+                },
+                grid: {
+                    vertLines: { color: settings.gridColor },
+                    horzLines: { color: settings.gridColor },
+                },
+            });
+        }
+        if (candlestickSeries.current) {
+            candlestickSeries.current.applyOptions(candleSeriesOptions);
+        }
+        const linePriceFormat = {
+            type: 'price',
+            precision: pricePrecision,
+            minMove,
+        };
+        pythonIndicatorSeries.current.forEach(series => series.applyOptions({ priceFormat: linePriceFormat }));
+        drawAll();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        settings.upColor,
+        settings.downColor,
+        settings.showBody,
+        settings.showBorders,
+        settings.showWicks,
+        settings.backgroundColor,
+        settings.gridColor,
+        settings.textColor,
+        pricePrecision,
+        minMove
+    ]);
+
+    useEffect(() => {
+        if (!chartInstance.current) return;
+        const activeKeys = new Set();
+        pythonIndicators.forEach(instanceResult => {
+            const instance = pythonIndicatorInstances.find(item => item.instance_id === instanceResult.instance_id);
+            (instanceResult.result?.plots || []).forEach(plot => {
+                if (plot.type !== 'line') return;
+                const key = `${instanceResult.instance_id}:${plot.id}`;
+                activeKeys.add(key);
+                let series = pythonIndicatorSeries.current.get(key);
+                if (!series) {
+                    series = chartInstance.current.addLineSeries({
+                        color: plot.color || '#ffd700', lineWidth: plot.line_width || 2,
+                        title: plot.name || instanceResult.indicator_id,
+                        priceFormat: { type: 'price', precision: pricePrecision, minMove },
+                    });
+                    pythonIndicatorSeries.current.set(key, series);
+                }
+                series.applyOptions({
+                    color: plot.color || '#ffd700', lineWidth: plot.line_width || 2,
+                    title: plot.name || instanceResult.indicator_id, visible: instance?.visible !== false,
+                });
+                series.setData(plot.data || []);
+            });
+        });
+        pythonIndicatorSeries.current.forEach((series, key) => {
+            if (!activeKeys.has(key)) {
+                chartInstance.current.removeSeries(series);
+                pythonIndicatorSeries.current.delete(key);
+            }
+        });
+        drawAll();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pythonIndicators, pythonIndicatorInstances, pricePrecision, minMove]);
+
+    // Disable chart panning when drawing or dragging
+    useEffect(() => {
+        if (chartInstance.current) {
+            const isDrawingToolActive = activeTool && activeTool !== 'cursor';
+            const isActivelyDragging = !!dragState;
+            const isActivelyDrawing = drawingState.isDrawing;
+            const shouldDisablePan = isDrawingToolActive || isActivelyDragging || isActivelyDrawing;
+            
+            chartInstance.current.applyOptions({
+                handleScroll: {
+                    pressedMouseMove: !shouldDisablePan,
+                    horzTouchDrag: !shouldDisablePan,
+                    vertTouchDrag: !shouldDisablePan,
+                },
+                handleScale: {
+                    axisPressedMouseMove: !shouldDisablePan,
+                }
+            });
+        }
+    }, [activeTool, dragState, drawingState.isDrawing]);
+
+	    const prevSymbolRef = useRef(activeSymbol);
+    const prevTimeframeRef = useRef(timeframe);
 
     // Update data when it changes
     useEffect(() => {
@@ -1271,16 +2121,17 @@ const Chart = forwardRef(({
                 }
             }
 
-            candlestickSeries.current.setData(data);
-            
-            if (ema9Series.current) {
-                const ema9Data = calculateEMA(data, 9);
-                ema9Series.current.setData(ema9Data);
+            const hasSymbolChanged = prevSymbolRef.current !== activeSymbol;
+            const hasTimeframeChanged = prevTimeframeRef.current !== timeframe;
+            prevSymbolRef.current = activeSymbol;
+            prevTimeframeRef.current = timeframe;
+
+            // Single replay candles are already applied by updateCandle.
+            if (data.length !== prevDataLengthRef.current + 1 || hasSymbolChanged || hasTimeframeChanged) {
+                candlestickSeries.current.setData(data);
             }
-            if (ema15Series.current) {
-                const ema15Data = calculateEMA(data, 15);
-                ema15Series.current.setData(ema15Data);
-            }
+
+            prevDataLengthRef.current = data.length;
             
             if (timeScale && prevTimeRange && prevTimeRange.from && prevTimeRange.to) {
                 timeScale.setVisibleRange(prevTimeRange);
@@ -1289,13 +2140,88 @@ const Chart = forwardRef(({
             drawAll();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [data]);
+    }, [data, activeSymbol, timeframe]);
+
+    // Render Systematic Backtest Markers
+    useEffect(() => {
+        if (!candlestickSeries.current) return;
+        if (!showStrategyTrades || !systematicTrades || systematicTrades.length === 0) {
+            candlestickSeries.current.setMarkers([]);
+            return;
+        }
+
+        const markers = [];
+        systematicTrades.forEach(trade => {
+            if (trade.entry_time) {
+                markers.push({
+                    time: trade.entry_time,
+                    position: trade.direction === 'BUY' ? 'belowBar' : 'aboveBar',
+                    color: trade.direction === 'BUY' ? '#26a69a' : '#ef5350',
+                    shape: trade.direction === 'BUY' ? 'arrowUp' : 'arrowDown',
+                    text: `${trade.direction === 'BUY' ? 'Long' : 'Short'} Entry`,
+                    size: 1.5
+                });
+            }
+            if (trade.exit_time) {
+                markers.push({
+                    time: trade.exit_time,
+                    position: trade.direction === 'BUY' ? 'aboveBar' : 'belowBar',
+                    color: trade.pnl >= 0 ? '#26a69a' : '#ef5350',
+                    shape: 'circle',
+                    text: `Exit ($${Math.round(trade.pnl)})`,
+                    size: 1.2
+                });
+            }
+        });
+
+        const lastTime = data && data.length > 0 ? data[data.length - 1].time : 0;
+        
+        // 1. Filter out future markers and snap to existing data times
+        const snappedMarkers = markers
+            .filter(m => m.time <= lastTime)
+            .map(m => {
+                let snappedTime = m.time;
+                if (data && data.length > 0) {
+                    // Binary search or simple linear scan for nearest time
+                    let nearest = data[0].time;
+                    let minDiff = Math.abs(m.time - nearest);
+                    for (let i = 1; i < data.length; i++) {
+                        const diff = Math.abs(m.time - data[i].time);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            nearest = data[i].time;
+                        } else if (diff > minDiff) {
+                            break; // Data is sorted ascending
+                        }
+                    }
+                    snappedTime = nearest;
+                }
+                return { ...m, time: snappedTime };
+            })
+            .sort((a, b) => a.time - b.time);
+            
+        // 2. Deduplicate markers sharing the exact same timestamp
+        const validMarkers = [];
+        const seenTimes = new Set();
+        snappedMarkers.forEach(m => {
+            if (!seenTimes.has(m.time)) {
+                seenTimes.add(m.time);
+                validMarkers.push(m);
+            }
+        });
+            
+        try {
+            candlestickSeries.current.setMarkers(validMarkers);
+        } catch (e) {
+            console.error("Error setting markers:", e);
+        }
+    }, [systematicTrades, showStrategyTrades, data]);
 
     // Redraw on updates
     useEffect(() => {
         drawAll();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [drawings, positions, pendingOrders, drawingState, selectedId, hoverBarX, isSelectingStartBar, hoverState]);
+    }, [drawings, positions, pendingOrders, drawingState, selectedId, hoverBarX, isSelectingStartBar, hoverState, localDraggedDrawing, plannedOrder, reviewingTrade]);
 
     useImperativeHandle(ref, () => ({
         updateCandle: (candle) => {
@@ -1303,6 +2229,26 @@ const Chart = forwardRef(({
                 candlestickSeries.current.update(candle);
                 drawAll();
             }
+        },
+        captureScreenshot: () => {
+            if (!chartInstance.current || !canvasRef.current) return null;
+            
+            // Get base lightweight-charts canvas image
+            const lwCanvas = chartInstance.current.takeScreenshot();
+            
+            // Create a merged canvas
+            const mergedCanvas = document.createElement('canvas');
+            mergedCanvas.width = lwCanvas.width;
+            mergedCanvas.height = lwCanvas.height;
+            const ctx = mergedCanvas.getContext('2d');
+            
+            // Draw lightweight charts
+            ctx.drawImage(lwCanvas, 0, 0);
+            
+            // Draw custom drawings overlay
+            ctx.drawImage(canvasRef.current, 0, 0);
+            
+            return mergedCanvas.toDataURL('image/png');
         }
     }));
 
@@ -1359,7 +2305,7 @@ const Chart = forwardRef(({
 
         if (hoverState) {
             const chartCoords = getChartCoords(coords.x, coords.y);
-            if (['sl', 'tp', 'limit', 'pendingSl', 'pendingTp'].includes(hoverState.type)) {
+            if (['sl', 'tp', 'limit', 'pendingSl', 'pendingTp', 'plannedEntry', 'plannedSl', 'plannedTp'].includes(hoverState.type)) {
                 // Dragging trade levels
                 setDragState({
                     type: hoverState.type,
@@ -1386,36 +2332,6 @@ const Chart = forwardRef(({
             });
         } else {
             setSelectedId(null);
-            
-            // Pass-through click to the chart underneath for panning
-            if (canvasRef.current) {
-                canvasRef.current.style.pointerEvents = 'none';
-                
-                // Programmatically dispatch mousedown to the element below
-                const elBelow = document.elementFromPoint(e.clientX, e.clientY);
-                if (elBelow) {
-                    const passEvent = new MouseEvent('mousedown', {
-                        bubbles: true,
-                        cancelable: true,
-                        clientX: e.clientX,
-                        clientY: e.clientY,
-                        screenX: e.screenX,
-                        screenY: e.screenY,
-                        button: e.button,
-                        buttons: e.buttons
-                    });
-                    elBelow.dispatchEvent(passEvent);
-                }
-
-                // Restore pointerEvents: 'auto' on mouseup
-                const handleGlobalMouseUp = () => {
-                    if (canvasRef.current) {
-                        canvasRef.current.style.pointerEvents = 'auto';
-                    }
-                    window.removeEventListener('mouseup', handleGlobalMouseUp);
-                };
-                window.addEventListener('mouseup', handleGlobalMouseUp);
-            }
         }
     };
 
@@ -1442,10 +2358,30 @@ const Chart = forwardRef(({
         if (dragState) {
             const chartCoords = getChartCoords(coords.x, coords.y);
             if (!chartCoords) return;
-
+ 
             if (['sl', 'tp', 'limit', 'pendingSl', 'pendingTp'].includes(dragState.type)) {
                 // Call callback to update SL/TP/Limit order in parent state
                 onDragUpdateLine(dragState.type, dragState.id, chartCoords.price);
+                return;
+            }
+
+            if (['plannedEntry', 'plannedSl', 'plannedTp'].includes(dragState.type) && plannedOrder) {
+                const newPrice = chartCoords.price;
+                const currentPriceVal = data && data.length > 0 ? data[data.length - 1].close : 0;
+                const entryPrice = plannedOrder.limitPrice || currentPriceVal;
+                const isBuy = plannedOrder.direction === 'BUY';
+
+                if (dragState.type === 'plannedEntry') {
+                    onUpdatePlannedOrder({ limitPrice: newPrice });
+                } else if (dragState.type === 'plannedSl') {
+                    const diff = isBuy ? (entryPrice - newPrice) : (newPrice - entryPrice);
+                    const pips = Math.max(1, Math.round(diff * 10));
+                    onUpdatePlannedOrder({ slPips: pips });
+                } else if (dragState.type === 'plannedTp') {
+                    const diff = isBuy ? (newPrice - entryPrice) : (entryPrice - newPrice);
+                    const pips = Math.max(1, Math.round(diff * 10));
+                    onUpdatePlannedOrder({ tpPips: pips });
+                }
                 return;
             }
 
@@ -1495,7 +2431,7 @@ const Chart = forwardRef(({
                     };
                     updatedDrawing.points = updatedPoints;
                 }
-            } else if (dragState.type === 'line') {
+            } else if (dragState.type === 'line' || dragState.type === 'area') {
                 if (updatedDrawing.type === 'path' && updatedDrawing.points && dragState.startPoints) {
                     updatedDrawing.points = updatedDrawing.points.map((pt, j) => {
                         const startPt = dragState.startPoints[j];
@@ -1530,43 +2466,25 @@ const Chart = forwardRef(({
             }
 
             // Local state updates instantly
-            onUpdateDrawing(updatedDrawing, false);
+            setLocalDraggedDrawing(updatedDrawing);
             return;
         }
 
-        if (activeTool === 'cursor') {
-            const hover = detectHover(coords.x, coords.y);
-            setHoverState(hover);
-            
-            if (canvasRef.current) {
-                if (hover) {
-                    if (hover.type === 'p1' || hover.type === 'p2') {
-                        canvasRef.current.style.cursor = 'crosshair';
-                    } else if (['sl', 'tp', 'limit', 'pendingSl', 'pendingTp'].includes(hover.type)) {
-                        canvasRef.current.style.cursor = 'ns-resize';
-                    } else {
-                        canvasRef.current.style.cursor = 'move';
-                    }
-                } else {
-                    canvasRef.current.style.cursor = 'default';
-                    // Forward event to lightweight-charts below to enable native crosshair and tooltips
-                    canvasRef.current.style.pointerEvents = 'none';
-                    const elBelow = document.elementFromPoint(e.clientX, e.clientY);
-                    if (elBelow) {
-                        const passEvent = new MouseEvent('mousemove', {
-                            bubbles: true,
-                            cancelable: true,
-                            clientX: e.clientX,
-                            clientY: e.clientY,
-                            movementX: e.movementX,
-                            movementY: e.movementY,
-                            buttons: e.buttons
-                        });
-                        elBelow.dispatchEvent(passEvent);
-                    }
-                    canvasRef.current.style.pointerEvents = 'auto';
-                }
+        const hover = detectHover(coords.x, coords.y);
+        setHoverState(hover);
+
+        if (hover) {
+            if (hover.type === 'p1' || hover.type === 'p2' || hover.type === 'p3' || hover.type?.startsWith('path_point_')) {
+                setInteractionCursor('nwse-resize');
+            } else if (['sl', 'tp', 'limit', 'pendingSl', 'pendingTp', 'plannedEntry', 'plannedSl', 'plannedTp'].includes(hover.type)) {
+                setInteractionCursor('ns-resize');
+            } else {
+                setInteractionCursor('move');
             }
+        } else if (activeTool && activeTool !== 'cursor') {
+            setInteractionCursor('crosshair');
+        } else {
+            setInteractionCursor('default');
         }
     };
 
@@ -1579,11 +2497,22 @@ const Chart = forwardRef(({
             if (coords) {
                 const chartCoords = getChartCoords(coords.x, coords.y);
                 if (chartCoords && chartCoords.time && chartCoords.price) {
+                    const p1 = drawingState.startPoint;
+                    const p2 = { time: chartCoords.time, price: chartCoords.price };
+                    let extraProps = {};
+                    if (activeTool === 'risk_reward') {
+                        const isLong = p2.price < p1.price;
+                        extraProps.p3 = {
+                            time: p1.time,
+                            price: isLong ? p1.price + Math.abs(p1.price - p2.price) * 2 : p1.price - Math.abs(p1.price - p2.price) * 2
+                        };
+                    }
                     onAddDrawing({
                         id: String(Date.now()),
                         type: activeTool,
-                        p1: drawingState.startPoint,
-                        p2: { time: chartCoords.time, price: chartCoords.price }
+                        p1: p1,
+                        p2: p2,
+                        ...extraProps
                     });
                 }
             }
@@ -1600,15 +2529,15 @@ const Chart = forwardRef(({
                         // Drag end line calls database persistence
                         onDragEndLine(dragState.type, dragState.id, chartCoords.price);
                     } else if (dragState.drawingId) {
-                        const drawing = drawings.find(d => d.id === dragState.drawingId);
-                        if (drawing) {
+                        if (localDraggedDrawing) {
                             // Send final coordinates to database
-                            onUpdateDrawing(drawing, true);
+                            onUpdateDrawing(localDraggedDrawing, true);
                         }
                     }
                 }
             }
             setDragState(null);
+            setLocalDraggedDrawing(null);
         }
     };
 
@@ -1623,25 +2552,131 @@ const Chart = forwardRef(({
         }
     };
 
+    const handleMouseLeave = () => {
+        setHoverState(null);
+        setHoverBarX(null);
+        setInteractionCursor('default');
+    };
+
     return (
-        <div style={{ position: 'relative', width: '100%', height: '100%', flex: 1, minHeight: 0 }}>
+        <div 
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+            onDoubleClick={handleDoubleClick}
+            style={{ position: 'relative', width: '100%', height: '100%', flex: 1, minHeight: 0, cursor: interactionCursor }}
+        >
+            {/* Chart Legend Box */}
+            {activeValues && (
+                <div style={{
+                    position: 'absolute',
+                    top: '12px',
+                    left: '12px',
+                    zIndex: 10,
+                    backgroundColor: `${settings.backgroundColor}dd`,
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${settings.gridColor}`,
+                    color: settings.textColor,
+                    fontFamily: 'sans-serif',
+                    fontSize: '11px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    pointerEvents: 'auto',
+                    userSelect: 'none',
+                    backdropFilter: 'blur(4px)',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
+                }}>
+                    {/* Header: Symbol / Timeframe */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold', color: '#ffffff', marginBottom: '2px' }}>
+                        <span>{cfg.displayName}</span>
+                        <span style={{ backgroundColor: '#2b3139', padding: '1px 4px', borderRadius: '3px', fontSize: '9px', color: '#ffd700' }}>{timeframe || '1m'}</span>
+                    </div>
+
+                    {/* OHLC values */}
+                    <div style={{ display: 'flex', gap: '8px', color: '#787b86', fontSize: '10px', marginBottom: '4px' }}>
+                        <span>O <span style={{ color: activeValues.close >= activeValues.open ? settings.upColor : settings.downColor }}>{activeValues.open.toFixed(pricePrecision)}</span></span>
+                        <span>H <span style={{ color: activeValues.close >= activeValues.open ? settings.upColor : settings.downColor }}>{activeValues.high.toFixed(pricePrecision)}</span></span>
+                        <span>L <span style={{ color: activeValues.close >= activeValues.open ? settings.upColor : settings.downColor }}>{activeValues.low.toFixed(pricePrecision)}</span></span>
+                        <span>C <span style={{ color: activeValues.close >= activeValues.open ? settings.upColor : settings.downColor }}>{activeValues.close.toFixed(pricePrecision)}</span></span>
+                    </div>
+
+                    {/* Indicators list */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderTop: '1px solid rgba(43, 49, 57, 0.3)', paddingTop: '4px' }}>
+                        {/* Systematic Strategy (if active) */}
+                        {systematicTrades && systematicTrades.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderTop: '1px solid rgba(43, 49, 57, 0.2)', paddingTop: '4px', marginTop: '2px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <span style={{ color: '#ffd700', fontWeight: 'bold' }}>★</span>
+                                    <span>Systematic Strategy Trades</span>
+                                </div>
+                                <button 
+                                    onClick={() => setShowStrategyTrades(!showStrategyTrades)}
+                                    style={{ background: 'none', border: 'none', color: showStrategyTrades ? '#d1d4dc' : '#787b86', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
+                                    title={showStrategyTrades ? "Hide Strategy Markers" : "Show Strategy Markers"}
+                                >
+                                    {showStrategyTrades ? <Eye size={12} /> : <EyeOff size={12} />}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {showMsbObMtf && msbObMtfData?.dashboard?.timeframes && (
+                <div style={{
+                    position: 'absolute', top: '12px', right: '72px', zIndex: 11,
+                    background: `${settings.backgroundColor}ee`, border: `1px solid ${settings.gridColor}`,
+                    borderRadius: '6px', overflow: 'hidden', color: settings.textColor,
+                    font: '11px sans-serif', boxShadow: '0 4px 10px rgba(0,0,0,.3)'
+                }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '62px 74px', fontWeight: 'bold', background: '#0b0f17' }}>
+                        <span style={{ padding: '6px' }}>Timeframe</span><span style={{ padding: '6px' }}>Trend</span>
+                    </div>
+                    {msbObMtfData.dashboard.timeframes.map(row => (
+                        <div key={row.timeframe} style={{ display: 'grid', gridTemplateColumns: '62px 74px', borderTop: `1px solid ${settings.gridColor}` }}>
+                            <span style={{ padding: '5px 6px' }}>{row.timeframe}</span>
+                            <span style={{ padding: '5px 6px', color: '#fff', background: row.trend === 1 ? '#15803d' : row.trend === -1 ? '#b91c1c' : '#4b5563' }}>{row.label}</span>
+                        </div>
+                    ))}
+                    <div style={{ display: 'grid', gridTemplateColumns: '62px 74px', borderTop: `1px solid ${settings.gridColor}`, fontWeight: 'bold' }}>
+                        <span style={{ padding: '6px' }}>Overall</span>
+                        <span style={{ padding: '6px', color: '#fff', background: msbObMtfData.dashboard.bias === 'bullish' ? '#15803d' : msbObMtfData.dashboard.bias === 'bearish' ? '#b91c1c' : '#4b5563' }}>
+                            {msbObMtfData.dashboard.bias.toUpperCase()}
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {(() => {
+                const item = pythonIndicators.find(result => {
+                    const instance = pythonIndicatorInstances.find(candidate => candidate.instance_id === result.instance_id);
+                    return instance?.visible !== false && result.result?.dashboard?.timeframes;
+                });
+                if (!item) return null;
+                const dashboard = item.result.dashboard;
+                return <div style={{ position: 'absolute', top: '12px', right: '72px', zIndex: 12, background: `${settings.backgroundColor}f2`, border: `1px solid ${settings.gridColor}`, borderRadius: '6px', overflow: 'hidden', color: settings.textColor, font: '11px sans-serif' }}>
+                    <div style={{ padding: '6px 9px', fontWeight: 'bold', background: '#0b0f17' }}>Multi-Timeframe Bias</div>
+                    {dashboard.timeframes.map(row => <div key={row.timeframe} style={{ display: 'grid', gridTemplateColumns: '55px 72px', borderTop: `1px solid ${settings.gridColor}` }}><span style={{ padding: '5px' }}>{row.timeframe}</span><span style={{ padding: '5px', color: '#fff', background: row.trend === 1 ? '#15803d' : row.trend === -1 ? '#b91c1c' : '#4b5563' }}>{row.label}</span></div>)}
+                    <div style={{ padding: '6px', fontWeight: 'bold', color: '#fff', background: dashboard.bias === 'bullish' ? '#15803d' : dashboard.bias === 'bearish' ? '#b91c1c' : '#4b5563' }}>{dashboard.bias.toUpperCase()}</div>
+                </div>;
+            })()}
+
             <div 
                 ref={chartContainerRef} 
-                style={{ width: '100%', height: '100%' }}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
             />
             <canvas
                 ref={canvasRef}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onDoubleClick={handleDoubleClick}
                 style={{
                     position: 'absolute',
                     top: 0,
                     left: 0,
                     width: '100%',
                     height: '100%',
-                    pointerEvents: 'auto',
+                    pointerEvents: 'none',
                     zIndex: 10,
                 }}
             />
@@ -1793,8 +2828,14 @@ const Chart = forwardRef(({
                 const style = selectedDrawing.style || {};
                 
                 return (
-                    <div style={{
-                        position: 'absolute',
+                    <div 
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onPointerUp={(e) => e.stopPropagation()}
+                        style={{
+                            position: 'absolute',
                         top: '12px',
                         left: '50%',
                         transform: 'translateX(-50%)',
@@ -1935,8 +2976,8 @@ const Chart = forwardRef(({
                             </div>
                         )}
 
-                        {/* Fills Opacity for Rectangle & Risk Reward */}
-                        {['rectangle', 'risk_reward'].includes(selectedDrawing.type) && (
+                        {/* Fills Opacity for Rectangle, Risk Reward & Fib */}
+                        {['rectangle', 'risk_reward', 'fib'].includes(selectedDrawing.type) && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span>Opacity:</span>
                                 <input 
@@ -1955,6 +2996,76 @@ const Chart = forwardRef(({
                                     style={{ width: '60px', cursor: 'pointer' }}
                                 />
                             </div>
+                        )}
+
+                        {/* Rectangle templates: Zone type and Timeframe toggle */}
+                        {selectedDrawing.type === 'rectangle' && (
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span>Zone:</span>
+                                    <select
+                                        value={style.zoneTemplate || ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            const updatedColor = {
+                                                'sbs': '#9333ea',
+                                                'rbs': '#f97316',
+                                                'tjl': '#3b82f6',
+                                                'a+': '#fbbf24'
+                                            }[val] || style.color || '#3b82f6';
+                                            const updated = {
+                                                ...selectedDrawing,
+                                                style: { 
+                                                    ...style, 
+                                                    zoneTemplate: val,
+                                                    color: updatedColor
+                                                }
+                                            };
+                                            onUpdateDrawing(updated, true);
+                                        }}
+                                        style={{ backgroundColor: '#2b3139', border: '1px solid #434651', color: '#fff', borderRadius: '4px', padding: '2px 4px', fontSize: '11px', outline: 'none' }}
+                                    >
+                                        <option value="">None</option>
+                                        <option value="sbs">SBS</option>
+                                        <option value="rbs">RBS</option>
+                                        <option value="tjl">TJL</option>
+                                        <option value="a+">A+</option>
+                                    </select>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span>TF:</span>
+                                    <div style={{ display: 'flex', gap: '2px', backgroundColor: '#131722', padding: '2px', borderRadius: '4px' }}>
+                                        {['1m', '5m', '15m', '1h', '4h', '1d'].map(tf => {
+                                            const isActive = style.timeframe === tf;
+                                            return (
+                                                <button
+                                                    key={tf}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const updated = {
+                                                            ...selectedDrawing,
+                                                            style: { ...style, timeframe: isActive ? '' : tf }
+                                                        };
+                                                        onUpdateDrawing(updated, true);
+                                                    }}
+                                                    style={{
+                                                        background: isActive ? '#2962ff' : 'transparent',
+                                                        color: isActive ? '#fff' : '#787b86',
+                                                        border: 'none',
+                                                        padding: '2px 5px',
+                                                        borderRadius: '3px',
+                                                        fontSize: '10px',
+                                                        cursor: 'pointer',
+                                                        fontWeight: isActive ? 'bold' : 'normal'
+                                                    }}
+                                                >
+                                                    {tf}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </>
                         )}
 
                         {/* R:R specific settings */}

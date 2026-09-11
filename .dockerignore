@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Environments
+.env
+.venv
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Data & Logs
+data/
+*.log
+*.rdb
+redis-local/
+tmp/
+scratch/
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db

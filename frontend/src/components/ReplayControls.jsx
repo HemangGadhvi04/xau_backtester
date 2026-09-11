@@ -1,5 +1,5 @@
 
-import { Play, Pause, FastForward, Scissors } from 'lucide-react';
+import { Loader2, Play, Pause, FastForward, Scissors } from 'lucide-react';
 
 const ReplayControls = ({ 
     isPlaying, 
@@ -8,31 +8,56 @@ const ReplayControls = ({
     onSpeedChange,
     onNextCandle,
     timeframe,
+    isLoading,
+    loadingTimeframe,
     onTimeframeChange,
     isSelectingStartBar,
-    onToggleSelectStartBar
+    onToggleSelectStartBar,
+    activeSymbol,
+    onSymbolChange
 }) => {
     const speedOptions = [1, 2, 5, 10, 25, 50, 100];
     const timeframes = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'];
+    const symbols = ['XAUUSD', 'BTCUSD', 'EURUSD'];
 
     return (
         <div style={styles.container}>
+            {/* Symbol Dropdown Selector */}
+            <div style={styles.group}>
+                <span style={styles.label}>Symbol:</span>
+                <select 
+                    value={activeSymbol} 
+                    onChange={(e) => onSymbolChange(e.target.value)}
+                    style={styles.select}
+                >
+                    {symbols.map(sym => (
+                        <option key={sym} value={sym}>{sym === 'XAUUSD' ? 'XAU/USD (Gold)' : sym === 'BTCUSD' ? 'BTC/USD (Bitcoin)' : 'EUR/USD (Euro)'}</option>
+                    ))}
+                </select>
+            </div>
+
             {/* Timeframe Selector */}
             <div style={styles.group}>
-                {timeframes.map(tf => (
-                    <button
-                        key={tf}
-                        onClick={() => onTimeframeChange(tf)}
-                        style={{
-                            ...styles.tfButton,
-                            backgroundColor: timeframe === tf ? '#2962ff' : 'transparent',
-                            color: timeframe === tf ? '#ffffff' : '#d1d4dc',
-                            borderColor: timeframe === tf ? '#2962ff' : '#434651'
-                        }}
-                    >
-                        {tf}
-                    </button>
-                ))}
+                {timeframes.map(tf => {
+                    const isActive = timeframe === tf;
+                    const isLoadingTarget = isLoading && loadingTimeframe === tf;
+                    return (
+                        <button
+                            key={tf}
+                            onClick={() => onTimeframeChange(tf)}
+                            disabled={isLoadingTarget}
+                            style={{
+                                ...styles.tfButton,
+                                backgroundColor: isActive ? '#2962ff' : 'transparent',
+                                color: isActive ? '#ffffff' : '#d1d4dc',
+                                borderColor: isActive ? '#2962ff' : '#434651',
+                                opacity: isLoading && !isLoadingTarget ? 0.72 : 1
+                            }}
+                        >
+                            {isLoadingTarget ? <Loader2 size={14} className="tf-loading-icon" /> : tf}
+                        </button>
+                    );
+                })}
             </div>
 
             {/* Replay State Controls */}
@@ -111,11 +136,16 @@ const styles = {
     },
     tfButton: {
         padding: '6px 12px',
+        minWidth: '45px',
+        minHeight: '31px',
         border: '1px solid #434651',
         borderRadius: '4px',
         cursor: 'pointer',
         fontSize: '13px',
         fontWeight: '600',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         transition: 'all 0.15s ease',
     },
     button: {

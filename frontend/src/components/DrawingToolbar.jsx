@@ -9,9 +9,11 @@ import {
   ArrowRight,
   ArrowDown,
   Waypoints,
+  Settings,
+  BarChart2,
   Ruler,
   Clock,
-  BarChart2
+  ListPlus
 } from 'lucide-react';
 
 const RiskRewardIcon = (props) => (
@@ -22,7 +24,7 @@ const RiskRewardIcon = (props) => (
   </svg>
 );
 
-const DrawingToolbar = ({ activeTool, onChangeTool, onClearDrawings, showSessions, onToggleSessions }) => {
+const DrawingToolbar = ({ activeTool, onChangeTool, onClearDrawings, showSessions, onToggleSessions, onOpenSettings, onOpenIndicators }) => {
   const tools = [
     { id: 'cursor', label: 'Cursor', icon: MousePointer },
     { id: 'trendline', label: 'Trendline', icon: TrendingUp },
@@ -38,7 +40,7 @@ const DrawingToolbar = ({ activeTool, onChangeTool, onClearDrawings, showSession
   ];
 
   return (
-    <div style={styles.toolbar}>
+    <div style={styles.toolbar} className="drawing-toolbar-container">
       {tools.map(tool => {
         const IconComponent = tool.icon;
         const isActive = activeTool === tool.id;
@@ -60,14 +62,28 @@ const DrawingToolbar = ({ activeTool, onChangeTool, onClearDrawings, showSession
         onClick={onToggleSessions}
         title="Toggle ICT Sessions Shading"
         className={`drawing-tool-sessions-btn ${showSessions ? 'active' : ''}`}
+        style={{ flexShrink: 0, minHeight: '36px' }}
       >
         <Clock size={20} />
+      </button>
+
+      <button 
+        onClick={onOpenSettings}
+        title="Chart Settings"
+        className="drawing-tool-btn"
+      >
+        <Settings size={20} />
+      </button>
+
+      <button onClick={onOpenIndicators} title="Add Python Indicator" className="drawing-tool-btn">
+        <ListPlus size={20} />
       </button>
 
       <button 
         onClick={onClearDrawings}
         title="Clear All Drawings"
         className="drawing-tool-clear-btn"
+        style={{ flexShrink: 0, minHeight: '36px' }}
       >
         <Trash2 size={20} />
       </button>
@@ -88,36 +104,14 @@ const styles = {
     alignItems: 'center',
     height: '100%',
     boxSizing: 'border-box',
-  },
-  button: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '36px',
-    height: '36px',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  clearButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '36px',
-    height: '36px',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    backgroundColor: 'transparent',
-    color: '#ef5350',
-    transition: 'all 0.2s ease',
+    overflowY: 'auto',
   },
   divider: {
     width: '24px',
     height: '1px',
     backgroundColor: 'rgba(43, 49, 57, 0.8)',
     margin: '8px 0',
+    flexShrink: 0,
   }
 };
 

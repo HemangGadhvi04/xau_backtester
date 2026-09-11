@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: titan_user
+      POSTGRES_PASSWORD: titan_password
+      POSTGRES_DB: titan_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: >
+      bash -c "cd backend && alembic upgrade head && cd .. && gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+psycopg2://titan_user:titan_password@db:5432/titan_db
+      - JWT_SECRET=${JWT_SECRET?JWT_SECRET_is_required_in_env_file}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - db
+      - redis
+    restart: always
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A backend.worker worker --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+psycopg2://titan_user:titan_password@db:5432/titan_db
+      - JWT_SECRET=${JWT_SECRET?JWT_SECRET_is_required_in_env_file}
+      - C_FORCE_ROOT=1
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - db
+      - redis
+      - api
+    restart: always
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: always
+
+volumes:
+  pg_data:
+  redis_data:

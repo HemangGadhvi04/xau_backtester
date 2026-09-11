@@ -3,6 +3,7 @@ import lzma
 import struct
 import requests
 import pandas as pd
+import time
 from datetime import datetime, timedelta, timezone
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -10,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 BASE_URL = "https://datafeed.dukascopy.com/datafeed"
 SYMBOL = "XAUUSD"
 START_DEFAULT = datetime(2024, 6, 3, tzinfo=timezone.utc)
-END = datetime(2026, 6, 3, tzinfo=timezone.utc)
+END = datetime.now(timezone.utc)
 
 OUT_DIR = "data/raw"
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -168,12 +169,11 @@ def main():
         print(f"\nDownloading batch: {chunk_hours[0].strftime('%Y-%m-%d')} to {chunk_hours[-1].strftime('%Y-%m-%d')} ({len(chunk_hours)} hours)...")
         
         chunk_ticks = []
-        # Download concurrently
-        with ThreadPoolExecutor(max_workers=16) as executor:
-            future_to_hour = {executor.submit(download_hour, h): h for h in chunk_hours}
-            
-            for future in as_completed(future_to_hour):
-                hour = future_to_hour[future]
+        # Download concurrently with ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {executor.submit(download_hour, hour): hour for hour in chunk_hours}
+            for future in as_completed(futures):
+                hour = futures[future]
                 try:
                     _, df = future.result()
                     if not df.empty:

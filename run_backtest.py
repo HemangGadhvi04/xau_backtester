@@ -7,8 +7,8 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.engine import BacktestEngine
-from strategies.ema_cross import EMACrossoverStrategy
-from backend.data_service import get_xauusd_data
+from strategies.macd_adx import MACDADXStrategy
+from backend.data_service import get_market_data as get_xauusd_data
 
 def format_perf_report(metrics):
     if not metrics:
@@ -31,8 +31,8 @@ def format_perf_report(metrics):
 
 def main():
     print("Loading historical candles via DuckDB OLAP engine...")
-    # Load 1m candles for backtesting
-    candles = get_xauusd_data(timeframe="1m")
+    # Load 5m candles for backtesting
+    candles = get_xauusd_data(timeframe="5m")
     
     if not candles:
         print("Error: No candle data available in data/raw/. Please ensure the downloader is running.")
@@ -50,13 +50,15 @@ def main():
     # Set data
     engine.load_data(candles)
     
-    # Instantiate Strategy (9/15 EMA Cross, 20 pips SL, 40 pips TP)
-    strategy = EMACrossoverStrategy(
-        fast_period=9, 
-        slow_period=15, 
-        lots=0.1, 
-        sl_pips=20, 
-        tp_pips=40
+    # Instantiate Strategy (MACD + ADX Pine Script Logic)
+    strategy = MACDADXStrategy(
+        fast_length=5,
+        slow_length=13,
+        signal_length=20,
+        di_length=10,
+        adx_smoothing=14,
+        adx_threshold=25.0,
+        lots=0.1
     )
     
     print("\nRunning Event-Driven Backtesting Loop...")

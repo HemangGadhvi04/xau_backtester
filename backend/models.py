@@ -3,10 +3,19 @@ from sqlalchemy.orm import relationship
 from backend.database import Base
 import datetime
 
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(String, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 class ReplaySession(Base):
     __tablename__ = "replay_sessions"
 
     id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     symbol = Column(String, default="XAUUSD")
     timeframe = Column(String, default="1m")
     current_time = Column(Integer, default=0)
@@ -18,7 +27,9 @@ class Drawing(Base):
     __tablename__ = "drawings"
 
     id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     session_id = Column(String, index=True)
+    symbol = Column(String, default="XAUUSD")
     type = Column(String, nullable=False)
     points_json = Column(String, nullable=False)  # Serialized JSON points list: [{"time": ..., "price": ...}]
     style_json = Column(String, nullable=True)   # Serialized style parameters
@@ -30,7 +41,9 @@ class Trade(Base):
     __tablename__ = "trades"
 
     id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     session_id = Column(String, index=True)
+    symbol = Column(String, default="XAUUSD")
     direction = Column(String, nullable=False)     # BUY or SELL
     lots = Column(Float, nullable=False)
     entry_price = Column(Float, nullable=False)
@@ -62,3 +75,4 @@ class TradeNote(Base):
     mistake_type = Column(String, nullable=True)
     emotion = Column(String, nullable=True)
     lesson = Column(String, nullable=True)
+    screenshot_url = Column(String, nullable=True)

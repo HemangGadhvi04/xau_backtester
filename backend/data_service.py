@@ -6,7 +6,7 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "raw
 
 _data_cache = {}
 
-def get_xauusd_data(timeframe="1m"):
+def get_market_data(symbol="XAUUSD", timeframe="1m", start_ts=None, end_ts=None, limit=None):
     """
     Loads 1-minute XAUUSD bid data from Parquet, or falls back to CSV,
     and aggregates it into the requested timeframe using DuckDB.
@@ -14,11 +14,17 @@ def get_xauusd_data(timeframe="1m"):
     { time: timestamp, open: O, high: H, low: L, close: C }
     """
     global _data_cache
-    if timeframe in _data_cache:
-        return _data_cache[timeframe]
+    cache_key = f"{symbol}_{timeframe}_{start_ts}_{end_ts}_{limit}"
+    if cache_key in _data_cache:
+        return _data_cache[cache_key]
 
-    parquet_path = os.path.join(DATA_DIR, "XAUUSD_bid_1m.parquet")
-    csv_path = os.path.join(DATA_DIR, "XAUUSD_bid_1m.csv")
+    parquet_path = os.path.join(DATA_DIR, f"{symbol}_bid_1m.parquet")
+    csv_path = os.path.join(DATA_DIR, f"{symbol}_bid_1m.csv")
+    
+    if not os.path.exists(parquet_path):
+        parquet_path = os.path.join(DATA_DIR, f"{symbol}_1m.parquet")
+    if not os.path.exists(csv_path):
+        csv_path = os.path.join(DATA_DIR, f"{symbol}_1m.csv")
     
     source = None
     if os.path.exists(parquet_path):
@@ -65,25 +71,49 @@ def get_xauusd_data(timeframe="1m"):
         high_col = next((c for c in col_names if c.lower() == "high"), "High")
         low_col = next((c for c in col_names if c.lower() == "low"), "Low")
         close_col = next((c for c in col_names if c.lower() == "close"), "Close")
+        vol_col = next((c for c in col_names if c.lower() == "volume"), None)
         
+        where_clauses = []
+        if start_ts is not None:
+            where_clauses.append(f"epoch(CAST(\"{time_col}\" AS TIMESTAMP WITH TIME ZONE)) >= {start_ts}")
+        if end_ts is not None:
+            where_clauses.append(f"epoch(CAST(\"{time_col}\" AS TIMESTAMP WITH TIME ZONE)) <= {end_ts}")
+            
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+            
+        limit_sql = ""
+        if limit is not None:
+            limit_sql = f"LIMIT {limit}"
+            
+        
+        vol_select = f', sum("{vol_col}") AS volume' if vol_col else ""
+
         # Aggregate using time_bucket and epoch conversion
         query = f"""
-            SELECT 
-                epoch(time_bucket(INTERVAL '{interval}', CAST("{time_col}" AS TIMESTAMP WITH TIME ZONE))) AS time,
-                first("{open_col}" ORDER BY "{time_col}") AS open,
-                max("{high_col}") AS high,
-                min("{low_col}") AS low,
-                last("{close_col}" ORDER BY "{time_col}") AS close
-            FROM raw_data
-            GROUP BY time
-            ORDER BY time
+            SELECT * FROM (
+                SELECT 
+                    epoch(time_bucket(INTERVAL '{interval}', CAST("{time_col}" AS TIMESTAMP WITH TIME ZONE))) AS time,
+                    first("{open_col}" ORDER BY "{time_col}") AS open,
+                    max("{high_col}") AS high,
+                    min("{low_col}") AS low,
+                    last("{close_col}" ORDER BY "{time_col}") AS close
+                    {vol_select}
+                FROM raw_data
+                {where_sql}
+                GROUP BY time
+                ORDER BY time DESC
+                {limit_sql}
+            ) sub
+            ORDER BY time ASC
         """
         
         df = con.execute(query).df()
         
         # Convert df to dictionary records
         chart_data = df.to_dict(orient="records")
-        _data_cache[timeframe] = chart_data
+        _data_cache[cache_key] = chart_data
         return chart_data
         
     except Exception as e:

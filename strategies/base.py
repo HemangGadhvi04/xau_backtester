@@ -16,6 +16,22 @@ class BaseStrategy(ABC):
         """
         pass
 
+    def calculate_lots(self, entry_price, sl_price):
+        """Dynamically calculates position sizing based on risk percentage or static lots."""
+        is_lot_mode = getattr(self, 'is_lot_mode', True)
+        if is_lot_mode:
+            return getattr(self, 'lots', 0.1)
+            
+        risk_percent = getattr(self, 'risk_percent', 1.0)
+        risk_amount = self.engine.equity * (risk_percent / 100.0)
+        
+        sl_dist = abs(entry_price - sl_price)
+        if sl_dist <= 0:
+            return 0.01
+            
+        calculated_lots = risk_amount / (sl_dist * self.engine.contract_size)
+        return max(0.01, round(calculated_lots, 2))
+
     def buy(self, lots, sl=None, tp=None):
         """Issues a market Buy signal to the execution engine."""
         if self.engine:
@@ -26,6 +42,26 @@ class BaseStrategy(ABC):
         """Issues a market Sell signal to the execution engine."""
         if self.engine:
             return self.engine.place_order("SELL", lots, sl, tp)
+        return None
+
+    def buy_limit(self, lots, price, sl=None, tp=None):
+        if self.engine:
+            return self.engine.place_limit_order("BUY", lots, price, sl, tp)
+        return None
+
+    def sell_limit(self, lots, price, sl=None, tp=None):
+        if self.engine:
+            return self.engine.place_limit_order("SELL", lots, price, sl, tp)
+        return None
+
+    def buy_stop(self, lots, price, sl=None, tp=None):
+        if self.engine:
+            return self.engine.place_stop_order("BUY", lots, price, sl, tp)
+        return None
+
+    def sell_stop(self, lots, price, sl=None, tp=None):
+        if self.engine:
+            return self.engine.place_stop_order("SELL", lots, price, sl, tp)
         return None
 
     def cancel_all(self):

@@ -1,33 +1,35 @@
 import { useState } from 'react';
 import { TrendingUp, TrendingDown, ChevronDown, ChevronRight } from 'lucide-react';
+import { getSymbolConfig } from '../utils/symbolConfig';
 
 const TradePanel = ({ 
   account, 
   onPlaceOrder, 
-  positions, 
-  onClosePosition, 
-  pendingOrders = [], 
-  onCancelPendingOrder,
-  history, 
   currentPrice,
-  onReviewTrade
-}) => {
-  const [orderType, setOrderType] = useState('MARKET'); // MARKET or LIMIT
-  const [limitPrice, setLimitPrice] = useState('');
-  const [riskPercent, setRiskPercent] = useState(1); // default 1% risk
-  const [slPips, setSlPips] = useState(20); // default 20 pips SL
-  const [tpPips, setTpPips] = useState(40); // default 40 pips TP (1:2 risk/reward)
-  const [customLots, setCustomLots] = useState('');
-  const [isLotMode, setIsLotMode] = useState(false);
-  const [isOrderExpanded, setIsOrderExpanded] = useState(true);
-  const [isPositionsExpanded, setIsPositionsExpanded] = useState(true);
-  const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
+  activeSymbol,
 
-  // Stats calculation
-  const totalTrades = history.length;
-  const winningTrades = history.filter(t => t.pnl > 0).length;
-  const winRate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : 0;
-  const totalNet = history.reduce((sum, t) => sum + t.pnl, 0);
+  // Lifted state props
+  orderType,
+  setOrderType,
+  limitPrice,
+  setLimitPrice,
+  plannedDirection,
+  setPlannedDirection,
+  slPips,
+  setSlPips,
+  tpPips,
+  setTpPips,
+  riskPercent,
+  setRiskPercent,
+  customLots,
+  setCustomLots,
+  isLotMode,
+  setIsLotMode
+}) => {
+  const [isOrderExpanded, setIsOrderExpanded] = useState(true);
+
+  const cfg = getSymbolConfig(activeSymbol);
+  const pipValuePerLot = cfg.pipSize * cfg.contractSize;
 
   // Position sizing
   const calculateLotSize = () => {
@@ -35,7 +37,7 @@ const TradePanel = ({
       return parseFloat(customLots) || 0.01;
     }
     const riskAmount = (account.balance * (riskPercent / 100));
-    const calculatedLots = riskAmount / (slPips * 10);
+    const calculatedLots = riskAmount / (slPips * pipValuePerLot);
     return Math.max(0.01, Math.round(calculatedLots * 100) / 100);
   };
 
@@ -44,17 +46,19 @@ const TradePanel = ({
   const handleBuy = () => {
     const entry = orderType === 'LIMIT' ? parseFloat(limitPrice) : currentPrice;
     if (!entry) return;
-    const slPrice = entry - (slPips * 0.1);
-    const tpPrice = entry + (tpPips * 0.1);
+    const slPrice = entry - (slPips * cfg.pipSize);
+    const tpPrice = entry + (tpPips * cfg.pipSize);
     onPlaceOrder('BUY', currentLots, entry, slPrice, tpPrice, orderType === 'LIMIT');
+    setPlannedDirection(null);
   };
 
   const handleSell = () => {
     const entry = orderType === 'LIMIT' ? parseFloat(limitPrice) : currentPrice;
     if (!entry) return;
-    const slPrice = entry + (slPips * 0.1);
-    const tpPrice = entry - (tpPips * 0.1);
+    const slPrice = entry + (slPips * cfg.pipSize);
+    const tpPrice = entry - (tpPips * cfg.pipSize);
     onPlaceOrder('SELL', currentLots, entry, slPrice, tpPrice, orderType === 'LIMIT');
+    setPlannedDirection(null);
   };
 
   return (
@@ -77,7 +81,7 @@ const TradePanel = ({
       </div>
 
       {/* Trade execution */}
-      <div style={styles.section}>
+      <div style={{ ...styles.section, borderBottom: 'none' }}>
         <div 
           onClick={() => setIsOrderExpanded(!isOrderExpanded)} 
           style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginBottom: isOrderExpanded ? '10px' : '0' }}
@@ -88,6 +92,41 @@ const TradePanel = ({
         
         {isOrderExpanded && (
           <>
+            {/* Direction Selection */}
+            <div style={{...styles.modeToggleGroup, marginBottom: '8px'}}>
+              <button 
+                style={{...styles.toggleButton, backgroundColor: plannedDirection === 'BUY' ? '#26a69a' : '#2b3139', border: plannedDirection === 'BUY' ? '1px solid #ffffff' : 'none'}}
+                onClick={() => setPlannedDirection('BUY')}
+              >
+                BUY Direction
+              </button>
+              <button 
+                style={{...styles.toggleButton, backgroundColor: plannedDirection === 'SELL' ? '#ef5350' : '#2b3139', border: plannedDirection === 'SELL' ? '1px solid #ffffff' : 'none'}}
+                onClick={() => setPlannedDirection('SELL')}
+              >
+                SELL Direction
+              </button>
+              {plannedDirection && (
+                <button 
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: '1px solid #434651',
+                    color: '#787b86',
+                    cursor: 'pointer',
+                    borderRadius: '4px',
+                    padding: '0 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Cancel Planned Order"
+                  onClick={() => setPlannedDirection(null)}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
             {/* Order Type Toggle */}
             <div style={styles.modeToggleGroup}>
               <button 
@@ -98,10 +137,10 @@ const TradePanel = ({
               </button>
               <button 
                 style={{...styles.toggleButton, backgroundColor: orderType === 'LIMIT' ? '#2962ff' : '#2b3139'}}
-                onClick={() => {
-                  setOrderType('LIMIT');
-                  if (!limitPrice) setLimitPrice(currentPrice.toFixed(2));
-                }}
+	                onClick={() => {
+	                  setOrderType('LIMIT');
+	                  if (!limitPrice && currentPrice) setLimitPrice(currentPrice.toFixed(cfg.precision));
+	                }}
               >
                 Limit
               </button>
@@ -111,10 +150,10 @@ const TradePanel = ({
             {orderType === 'LIMIT' && (
               <div style={{...styles.inputCol, marginBottom: '10px'}}>
                 <span style={styles.inputLabel}>Limit Price</span>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  value={limitPrice} 
+	                <input 
+	                  type="number" 
+	                  step={cfg.pipSize}
+	                  value={limitPrice} 
                   onChange={(e) => setLimitPrice(e.target.value)}
                   style={styles.input} 
                 />
@@ -192,7 +231,7 @@ const TradePanel = ({
 
             <div style={styles.summaryBox}>
               <div>Lot Size: <strong>{currentLots.toFixed(2)}</strong></div>
-              <div>Risk per pip: <strong>${(currentLots * 10).toFixed(2)}</strong></div>
+              <div>Risk per pip: <strong>${(currentLots * pipValuePerLot).toFixed(2)}</strong></div>
             </div>
 
             <div style={styles.btnRow}>
@@ -206,177 +245,23 @@ const TradePanel = ({
           </>
         )}
       </div>
-
-      {/* Pending Orders Section */}
-      {pendingOrders.length > 0 && (
-        <div style={{ ...styles.section, maxHeight: '120px', overflowY: 'auto', flexShrink: 0 }}>
-          <h3 style={styles.sectionTitle}>Pending Orders ({pendingOrders.length})</h3>
-          {pendingOrders.map(order => (
-              <div key={order.id} style={{...styles.posCard, borderLeft: '3px solid #f59e0b', marginBottom: '6px'}}>
-                <div style={styles.posHeader}>
-                  <span style={{ color: order.type === 'BUY' ? '#26a69a' : '#ef5350', fontWeight: 'bold', fontSize: '12px' }}>
-                    {order.type} LIMIT {order.lots.toFixed(2)}
-                  </span>
-                  <button onClick={() => onCancelPendingOrder(order.id)} style={styles.closeBtn}>
-                    Cancel
-                  </button>
-                </div>
-                <div style={styles.posBody}>
-                  <div>Limit Price: {order.entryPrice.toFixed(2)}</div>
-                  <div>SL: {order.sl ? order.sl.toFixed(2) : '-'}</div>
-                  <div>TP: {order.tp ? order.tp.toFixed(2) : '-'}</div>
-                </div>
-              </div>
-            ))
-          }
-        </div>
-      )}
-
-      {/* Open Positions Section */}
-      <div style={{ ...styles.section, flex: isPositionsExpanded && positions.length > 0 ? 1.5 : '0 1 auto', minHeight: '40px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        <div 
-          onClick={() => setIsPositionsExpanded(!isPositionsExpanded)} 
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginBottom: isPositionsExpanded ? '10px' : '0' }}
-        >
-          <h3 style={{ ...styles.sectionTitle, margin: 0 }}>Open Positions ({positions.length})</h3>
-          {isPositionsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        </div>
-        
-        {isPositionsExpanded && (
-          positions.length === 0 ? (
-            <div style={styles.noTrades}>No open positions</div>
-          ) : (
-            <div style={{ overflowY: 'auto', flex: 1 }}>
-              {positions.map((pos) => {
-                const isBuy = pos.type === 'BUY';
-                const priceDiff = isBuy ? (currentPrice - pos.entryPrice) : (pos.entryPrice - currentPrice);
-                const unrealizedPnl = priceDiff * pos.lots * 100;
-                return (
-                  <div key={pos.id} style={{ ...styles.posCard, marginBottom: '6px' }}>
-                    <div style={styles.posHeader}>
-                      <span style={{ 
-                        color: isBuy ? '#26a69a' : '#ef5350', 
-                        fontWeight: 'bold',
-                        fontSize: '12px'
-                      }}>
-                        {pos.type} {pos.lots.toFixed(2)} Lots
-                      </span>
-                      <button onClick={() => onClosePosition(pos.id, currentPrice)} style={styles.closeBtn}>
-                        Close
-                      </button>
-                    </div>
-                    <div style={styles.posBody}>
-                      <div>Entry: {pos.entryPrice.toFixed(2)}</div>
-                      <div>Current: {currentPrice ? currentPrice.toFixed(2) : '-'}</div>
-                      <div style={{ 
-                        fontWeight: 'bold', 
-                        color: unrealizedPnl >= 0 ? '#26a69a' : '#ef5350' 
-                      }}>
-                        PnL: ${unrealizedPnl.toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        )}
-      </div>
-
-      {/* History Stats Section */}
-      <div style={{ ...styles.section, borderBottom: 'none', flex: isHistoryExpanded ? 2 : '0 1 auto', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div 
-          onClick={() => setIsHistoryExpanded(!isHistoryExpanded)} 
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginBottom: isHistoryExpanded ? '10px' : '0' }}
-        >
-          <h3 style={{ ...styles.sectionTitle, margin: 0 }}>Stats & History</h3>
-          {isHistoryExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        </div>
-
-        {isHistoryExpanded && (
-          <>
-            <div style={styles.statsGrid}>
-              <div>
-                <div style={styles.label}>Trades</div>
-                <div style={styles.statsVal}>{totalTrades}</div>
-              </div>
-              <div>
-                <div style={styles.label}>Win Rate</div>
-                <div style={styles.statsVal}>{winRate}%</div>
-              </div>
-              <div>
-                <div style={styles.label}>Net Profit</div>
-                <div style={{ ...styles.statsVal, color: totalNet >= 0 ? '#26a69a' : '#ef5350' }}>
-                  ${totalNet.toFixed(2)}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ marginTop: '10px', flex: 1, overflowY: 'auto', minHeight: '60px' }}>
-              {history.length === 0 ? (
-                <div style={styles.noTrades}>No trade history</div>
-              ) : (
-                history.map((trade) => {
-                  const isWin = trade.pnl > 0;
-                  return (
-                    <div 
-                      key={trade.id} 
-                      onClick={() => onReviewTrade && onReviewTrade(trade)} 
-                      style={{
-                        ...styles.posCard, 
-                        cursor: 'pointer', 
-                        borderLeft: `3px solid ${isWin ? '#26a69a' : '#ef5350'}`,
-                        transition: 'background-color 0.2s',
-                        marginBottom: '6px'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#363c47'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2b3139'}
-                    >
-                      <div style={styles.posHeader}>
-                        <span style={{ 
-                          color: trade.type === 'BUY' ? '#26a69a' : '#ef5350', 
-                          fontWeight: 'bold',
-                          fontSize: '12px'
-                        }}>
-                          {trade.type} {trade.lots.toFixed(2)}
-                        </span>
-                        <span style={{ 
-                          fontWeight: 'bold', 
-                          color: isWin ? '#26a69a' : '#ef5350',
-                          fontSize: '12px'
-                        }}>
-                          {isWin ? '+' : ''}${trade.pnl.toFixed(2)}
-                        </span>
-                      </div>
-                      <div style={{ ...styles.posBody, fontSize: '11px' }}>
-                        <div>Entry: {trade.entryPrice.toFixed(2)}</div>
-                        <div>Exit: {trade.closePrice ? trade.closePrice.toFixed(2) : '-'}</div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </>
-        )}
-      </div>
     </div>
   );
 };
 
 const styles = {
   container: {
+    width: '100%',
+    height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    width: '280px',
     backgroundColor: '#1e222d',
     borderLeft: '1px solid #2b3139',
-    padding: '16px',
-    boxSizing: 'border-box',
-    gap: '12px',
     color: '#d1d4dc',
-    height: '100%',
-    overflow: 'hidden'
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    overflowY: 'auto',
+    boxSizing: 'border-box',
+    padding: '16px'
   },
   section: {
     borderBottom: '1px solid rgba(43, 49, 57, 0.6)',
@@ -480,53 +365,6 @@ const styles = {
     justifyContent: 'center',
     gap: '6px',
     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-  },
-  noTrades: {
-    fontSize: '12px',
-    color: '#787b86',
-    textAlign: 'center',
-    padding: '12px 0'
-  },
-  posCard: {
-    backgroundColor: '#2b3139',
-    borderRadius: '4px',
-    padding: '8px 12px',
-    marginBottom: '8px',
-    borderLeft: '3px solid #3b82f6'
-  },
-  posHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '6px'
-  },
-  closeBtn: {
-    backgroundColor: 'rgba(239, 83, 80, 0.2)',
-    color: '#ef5350',
-    border: 'none',
-    padding: '3px 8px',
-    borderRadius: '3px',
-    fontSize: '11px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  posBody: {
-    fontSize: '12px',
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '4px 8px'
-  },
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
-    gap: '6px',
-    textAlign: 'center'
-  },
-  statsVal: {
-    fontSize: '13px',
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginTop: '2px'
   }
 };
 

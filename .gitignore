@@ -28,6 +28,9 @@ dist-ssr/
 *.parquet
 data/XAUUSD_*.parquet
 data/xauusd_*.parquet
+data/raw/
+data/screenshots/
+dump.rdb
 
 # OS files
 .DS_Store
@@ -43,3 +46,5 @@ Thumbs.db
 # Temp / Scratch files
 scratch/
 
+# Package files
+*_friend_package.zip

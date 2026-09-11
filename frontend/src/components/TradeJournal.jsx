@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import axios from 'axios';
-import { BookOpen, Edit2, Play, Check, X } from 'lucide-react';
+import { BookOpen, Edit2, Play, Check, X, Download, Filter } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000/api';
+const API_BASE = '/api';
+import { getSymbolConfig } from '../utils/symbolConfig';
 
-const TradeJournal = ({ history, onReviewTrade, onRefreshData }) => {
+const TradeJournal = ({ history, onReviewTrade, onRefreshData, activeSymbol }) => {
   const [editingTrade, setEditingTrade] = useState(null);
   const [formData, setFormData] = useState({
     setup_name: '',
@@ -14,9 +15,20 @@ const TradeJournal = ({ history, onReviewTrade, onRefreshData }) => {
     tag_input: ''
   });
 
+  const [filterSetup, setFilterSetup] = useState('');
+  const [filterOutcome, setFilterOutcome] = useState('All');
+
+  // Filter history
+  const filteredHistory = history.filter(trade => {
+    if (filterSetup && trade.journal_note?.setup_name !== filterSetup) return false;
+    if (filterOutcome === 'Win' && trade.pnl <= 0) return false;
+    if (filterOutcome === 'Loss' && trade.pnl >= 0) return false;
+    return true;
+  });
+
   // Calculate analytical metrics
-  const totalTrades = history.length;
-  const closedTrades = history.filter(t => t.pnl !== 0);
+  const totalTrades = filteredHistory.length;
+  const closedTrades = filteredHistory.filter(t => t.pnl !== 0);
   const winningTrades = closedTrades.filter(t => t.pnl > 0);
   const losingTrades = closedTrades.filter(t => t.pnl < 0);
   
@@ -29,20 +41,63 @@ const TradeJournal = ({ history, onReviewTrade, onRefreshData }) => {
   const avgWin = winningTrades.length > 0 ? (grossProfit / winningTrades.length).toFixed(2) : '0.00';
   const avgLoss = losingTrades.length > 0 ? (grossLoss / losingTrades.length).toFixed(2) : '0.00';
 
-  // Generate equity curve coordinates
+  const cfg = getSymbolConfig(activeSymbol || 'XAUUSD');
+
+  // Generate equity curve and drawdown
   let currentBalance = 10000;
   const balanceHistory = [10000];
+  let peakBalance = 10000;
+  let maxDrawdownValue = 0;
   
-  // Sort history chronologically to plot the equity curve
-  const chronoHistory = [...history].sort((a, b) => a.closeTime - b.closeTime);
+  // Consecutives
+  let consecutiveWins = 0;
+  let consecutiveLosses = 0;
+  let currentConsecutiveWins = 0;
+  let currentConsecutiveLosses = 0;
+  
+  const chronoHistory = [...filteredHistory].sort((a, b) => a.closeTime - b.closeTime);
   chronoHistory.forEach(trade => {
     currentBalance += trade.pnl;
     balanceHistory.push(currentBalance);
+    
+    if (currentBalance > peakBalance) peakBalance = currentBalance;
+    const drawdown = peakBalance - currentBalance;
+    if (drawdown > maxDrawdownValue) maxDrawdownValue = drawdown;
+    
+    if (trade.pnl > 0) {
+        currentConsecutiveWins++;
+        currentConsecutiveLosses = 0;
+        if (currentConsecutiveWins > consecutiveWins) consecutiveWins = currentConsecutiveWins;
+    } else if (trade.pnl < 0) {
+        currentConsecutiveLosses++;
+        currentConsecutiveWins = 0;
+        if (currentConsecutiveLosses > consecutiveLosses) consecutiveLosses = currentConsecutiveLosses;
+    }
   });
 
+  const maxDrawdownPct = peakBalance > 0 ? ((maxDrawdownValue / peakBalance) * 100).toFixed(2) : '0.00';
   const maxBalance = Math.max(...balanceHistory, 10000);
   const minBalance = Math.min(...balanceHistory, 9000);
   const balanceRange = maxBalance - minBalance || 1000;
+
+  const handleExportCSV = () => {
+    if (filteredHistory.length === 0) return;
+    const headers = ['Trade ID', 'Symbol', 'Type', 'Lots', 'Entry Price', 'Exit Price', 'PnL', 'Setup', 'Emotion', 'Outcome', 'Close Time'];
+    const rows = filteredHistory.map(t => [
+      t.id, t.symbol || activeSymbol, t.type, t.lots, t.entryPrice, t.closePrice || '', t.pnl,
+      t.journal_note?.setup_name || '', t.journal_note?.emotion || '',
+      t.pnl > 0 ? 'Win' : 'Loss', new Date(t.closeTime * 1000).toISOString()
+    ]);
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `trade_journal_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Render responsive SVG Equity Curve
   const renderEquityCurve = () => {
@@ -142,6 +197,29 @@ const TradeJournal = ({ history, onReviewTrade, onRefreshData }) => {
     <div style={styles.container}>
       <div style={styles.header}>
         <h2 style={styles.title}><BookOpen size={20} style={{ marginRight: '8px' }} /> Analytical Trade Journal</h2>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#1e222d', padding: '4px 8px', borderRadius: '4px', border: '1px solid #2b3139' }}>
+            <Filter size={14} color="#787b86" />
+            <select value={filterOutcome} onChange={e => setFilterOutcome(e.target.value)} style={{ ...styles.select, border: 'none', padding: '2px 4px', backgroundColor: 'transparent' }}>
+              <option value="All">All Trades</option>
+              <option value="Win">Winning Trades</option>
+              <option value="Loss">Losing Trades</option>
+            </select>
+            <select value={filterSetup} onChange={e => setFilterSetup(e.target.value)} style={{ ...styles.select, border: 'none', padding: '2px 4px', backgroundColor: 'transparent', marginLeft: '6px' }}>
+              <option value="">All Setups</option>
+              <option value="OTE (Optimal Trade Entry)">OTE</option>
+              <option value="FVG Sweep / Fill">FVG Sweep</option>
+              <option value="Order Block (OB)">Order Block</option>
+              <option value="Breaker Block (BB)">Breaker Block</option>
+              <option value="Liquidity Grab (BSL/SSL)">Liquidity Grab</option>
+              <option value="MSS / BOS Shift">MSS / BOS Shift</option>
+              <option value="Asian Session Liquidity">Asian Session Liquidity</option>
+            </select>
+          </div>
+          <button onClick={handleExportCSV} style={{ ...styles.actionBtn, backgroundColor: '#26a69a' }}>
+            <Download size={14} /> Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Grid: Stats & Equity Curve */}
@@ -171,6 +249,18 @@ const TradeJournal = ({ history, onReviewTrade, onRefreshData }) => {
                 <span style={{ color: '#ef5350' }}>-${parseFloat(avgLoss).toFixed(0)}</span>
               </div>
             </div>
+            <div style={styles.statBox}>
+              <div style={styles.statLabel}>Max Drawdown</div>
+              <div style={{ ...styles.statVal, color: '#ef5350' }}>{maxDrawdownPct}%</div>
+            </div>
+            <div style={styles.statBox}>
+              <div style={styles.statLabel}>Consecutive W / L</div>
+              <div style={styles.statVal}>
+                <span style={{ color: '#26a69a' }}>{consecutiveWins}</span>
+                <span style={{ color: '#787b86', margin: '0 4px' }}>/</span>
+                <span style={{ color: '#ef5350' }}>{consecutiveLosses}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -195,6 +285,7 @@ const TradeJournal = ({ history, onReviewTrade, onRefreshData }) => {
                 <th style={styles.th}>Entry</th>
                 <th style={styles.th}>Exit</th>
                 <th style={styles.th}>PnL</th>
+                <th style={styles.th}>Chart</th>
                 <th style={styles.th}>SMC Setup</th>
                 <th style={styles.th}>Emotion</th>
                 <th style={styles.th}>Mistakes / Lessons</th>
@@ -203,12 +294,12 @@ const TradeJournal = ({ history, onReviewTrade, onRefreshData }) => {
               </tr>
             </thead>
             <tbody>
-              {history.length === 0 ? (
+              {filteredHistory.length === 0 ? (
                 <tr>
                   <td colSpan="11" style={styles.emptyCell}>No logged trades found. Use Replay to execute trades.</td>
                 </tr>
               ) : (
-                history.map((trade) => {
+                filteredHistory.map((trade) => {
                   const isWin = trade.pnl > 0;
                   const dateStr = new Date(trade.closeTime * 1000).toLocaleString('en-US', {
                     month: 'short',
@@ -236,10 +327,22 @@ const TradeJournal = ({ history, onReviewTrade, onRefreshData }) => {
                         </span>
                       </td>
                       <td style={styles.td}>{trade.lots.toFixed(2)}</td>
-                      <td style={styles.td}>${trade.entryPrice.toFixed(2)}</td>
-                      <td style={styles.td}>${trade.closePrice ? trade.closePrice.toFixed(2) : '-'}</td>
+                      <td style={styles.td}>${trade.entryPrice.toFixed(cfg.precision)}</td>
+                      <td style={styles.td}>${trade.closePrice ? trade.closePrice.toFixed(cfg.precision) : '-'}</td>
                       <td style={{ ...styles.td, fontWeight: 'bold', color: isWin ? '#26a69a' : '#ef5350' }}>
                         {isWin ? '+' : ''}${trade.pnl.toFixed(2)}
+                      </td>
+                      <td style={styles.td}>
+                        {trade.journal_note?.screenshot_url ? (
+                          <img 
+                            src={trade.journal_note.screenshot_url} 
+                            alt="Trade Screenshot" 
+                            style={{ width: '40px', height: '30px', objectFit: 'cover', borderRadius: '4px', cursor: 'pointer', border: '1px solid #434651' }}
+                            onClick={() => handleStartEdit(trade)}
+                          />
+                        ) : (
+                          <span style={{ color: '#434651', fontSize: '10px' }}>No Image</span>
+                        )}
                       </td>
                       <td style={styles.td}>
                         <span style={{ fontWeight: '600', color: '#e0e3eb' }}>
@@ -307,6 +410,17 @@ const TradeJournal = ({ history, onReviewTrade, onRefreshData }) => {
               <h3 style={{ margin: 0 }}>Log Journal Entry (Trade #{String(editingTrade.id).slice(-4)})</h3>
               <button onClick={() => setEditingTrade(null)} style={styles.closeModalBtn}><X size={18} /></button>
             </div>
+            
+            {editingTrade.journal_note?.screenshot_url && (
+              <div style={{ width: '100%', marginBottom: '12px' }}>
+                <img 
+                  src={editingTrade.journal_note.screenshot_url} 
+                  alt="Trade Capture" 
+                  style={{ width: '100%', maxHeight: '250px', objectFit: 'contain', borderRadius: '6px', border: '1px solid #2b3139', backgroundColor: '#131722' }} 
+                />
+              </div>
+            )}
+            
             <form onSubmit={handleSaveJournal} style={styles.form}>
               <div style={styles.formRow}>
                 <div style={styles.formGroup}>
